@@ -1,0 +1,208 @@
+
+<!-- START PAGE -->
+<div id="listPage" data-role="page" data-theme="c">
+
+    <script type="text/javascript">
+    
+        // define some global variables
+        var BUCKET_NAME = "myObjects";
+        var KEY_NAME = "myObjectValue";
+        var objectCount = 0;
+        
+        // a UI method to create a list item based on a KiiObject
+        function createListItem(obj) {
+        
+            // generate some DOM elements.
+            // set the KiiObject URI to an attribute so it can be tracked
+            var row = $("<li></li>").attr("uri", obj.objectURI());
+            var link = $("<a></a>").attr("href", "#");
+            
+            // add the title/subtitle text
+            $(link).append("<h3>"+obj.get(KEY_NAME)+"</h3>");
+            $(link).append("<p>"+obj.created+"</p>");
+            
+            // build the element
+            $(row).append(link);
+            
+            // add a delete button based on the URI (so we know which object to delete)
+            var deleteLink = $("<a></a>").attr("href", "javascript:removeFromList('"+obj.objectURI()+"')");
+            
+            // build the element
+            $(deleteLink).append("<h3>"+obj.get(KEY_NAME)+"</h3>");
+            $(deleteLink).append("<p>"+obj.created+"</p>");
+            
+            // append the delete button to the row
+            $(row).append(deleteLink);
+            
+            // return the entire row
+            return row;
+        }
+
+        // called from the UI, this method removes an object from the server
+        function removeFromList(uri) {
+        
+            // show a loading animation
+            $.mobile.showPageLoadingMsg();	
+
+            // get a reference to the selected object
+            var obj = KiiObject.objectWithURI(uri);
+            
+            // perform an asynchronous deletion, with callbacks
+            obj.delete({
+
+                // callback for a successful deletion
+                success: function(theDeletedObject) {
+                
+                    // find the associated UI element and remove it from the list
+                    $("[uri='"+uri+"']").remove();
+                    
+                    // hide the loader
+                    $.mobile.hidePageLoadingMsg();	
+                },
+                
+                // callback for a failed deletion
+                failure: function(theObject, anErrorString) {
+
+                    // hide the loading animation
+                    $.mobile.hidePageLoadingMsg();	
+                    
+                    // tell the user
+                    alert("Unable to delete object: " + anErrorString);
+                    
+                    // tell the console
+                    Kii.logger("Unable to delete object: " + anErrorString);
+                }
+            });
+        
+            
+        }
+    
+        function addToList() {
+        
+            // show a loading animation
+            $.mobile.showPageLoadingMsg();	
+
+            // get the defined bucket belonging to this user
+            var bucket = KiiUser.getCurrentUser().bucketWithName(BUCKET_NAME);
+            
+            // create the object
+            var object = bucket.createObject();
+            
+            // set a key/value pair
+            object.set(KEY_NAME, "MyObject " + (++objectCount));
+            
+            // perform an asynchronous creation, with callbacks
+            object.save({
+
+                // callback for a successful deletion
+                success: function(theSavedObject) {
+
+                    // create a DOM element for this object
+                    var row = createListItem(theSavedObject);
+                    
+                    // prepend it to the listview and refresh the list
+                    $("#listview").prepend(row);
+                    $("#listview").listview('refresh');
+                    
+                    // hide the loader
+                    $.mobile.hidePageLoadingMsg();	
+                },
+                
+                // callback for a failed creation
+                failure: function(theObject, anErrorString) {
+
+                    // hide the loading animation
+                    $.mobile.hidePageLoadingMsg();	
+                    
+                    // tell the user
+                    alert("Unable to create object: " + anErrorString);
+                    
+                    // tell the console
+                    Kii.logger("Unable to create object: " + anErrorString);
+                }
+            });
+
+        }
+        
+        // load the existing objects from the server         
+        function loadList() {
+
+            // show a loading animation
+            $.mobile.showPageLoadingMsg();	
+
+            // get the defined bucket belonging to this user
+            var bucket = KiiUser.getCurrentUser().bucketWithName(BUCKET_NAME);
+            
+            // create an empty KiiQuery (will return all objects in the bucket)
+            var queryObject = KiiQuery.queryWithClause(null);
+            
+            // sort the results by creation date
+            queryObject.sortByAsc("_created");
+            
+            // perform the asynchronous query, with callbacks defined
+            bucket.executeQuery(queryObject, {
+
+                // callback for a successful query
+                success: function(queryPerformed, resultSet) {
+                
+                    // clear the existing objects from the list
+                    $("#listview").empty();
+
+                    // iterate through the result set
+                    for(var i=0; i<resultSet.length; i++) {
+                    
+                        // create a row UI element based on the object
+                        var obj = resultSet[i];
+                        var row = createListItem(obj);
+                        
+                        // add the row to the list
+                        $("#listview").append(row);
+                    }
+                    
+                    // refresh the list to show the added results
+                    $("#listview").listview('refresh');
+
+                    // hide the loader
+                    $.mobile.hidePageLoadingMsg();	
+                },
+                    
+                // callback for a failed query
+                failure: function(queryPerformed, anErrorString) {
+
+                    // hide the loading animation
+                    $.mobile.hidePageLoadingMsg();	
+                    
+                    // tell the user
+                    alert("Unable to execute query: " + anErrorString);
+                    
+                    // tell the console
+                    Kii.logger("Unable to execute query: " + anErrorString);
+                }
+            });
+        }
+
+        // when this page loads, load the existing objects from the server
+        $("#listPage").live('pageinit', function() {
+            loadList();
+        });
+    
+    </script>
+
+    <!-- START HEADER -->
+    <div data-role="header" data-theme="c">
+        <h1>My Objects</h1>
+    	<a href="javascript:addToList()" data-icon="plus" data-theme="b">Add</a>
+    </div>
+    <!-- END HEADER -->
+    
+    <!-- START CONTENT -->
+    <div data-role="content">	
+
+        <ul id="listview" data-role="listview" data-split-icon="delete" data-theme="d"></ul>
+
+    </div>
+    <!-- END CONTENT -->
+    
+    
+</div>
+<!-- END PAGE -->

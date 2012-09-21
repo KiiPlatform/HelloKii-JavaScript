@@ -1,0 +1,173 @@
+<html>
+    <head>
+    
+        <title>HelloKii</title>
+
+        <meta name="viewport" content="width=device-width, initial-scale=1"> 
+        
+        <script type="text/javascript" src="http://code.jquery.com/jquery-1.8.1.min.js"></script>
+        <script type="text/javascript" src="http://code.jquery.com/mobile/1.1.1/jquery.mobile-1.1.1.min.js"></script>
+        <link rel="stylesheet" href="http://code.jquery.com/mobile/1.1.1/jquery.mobile-1.1.1.min.css" />
+        
+        <script type="text/javascript" src="KiiSDK.js"></script>
+        
+        <script type="text/javascript">
+        
+            function randomString(length) {
+                
+                var text = "";
+                var possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+                
+                for( var i=0; i < length; i++ )
+                    text += possible.charAt(Math.floor(Math.random() * possible.length));
+                
+                return text;
+            }
+
+            // the user clicked the 'sign up' button
+            function performRegistration() {
+            
+                // show a loading animation
+                $.mobile.showPageLoadingMsg();	
+                
+                // get the user credentials from the UI
+                var username = $("#username").val();
+                var password = $("#password").val();
+                
+                // create the user
+                var user = KiiUser.userWithUsername(username, password);
+                
+                // perform the asynchronous registration, with callbacks defined
+                user.register({
+                
+                    // callback for successful registration
+                    success: function(theAuthedUser) {
+                    
+                        // show the list of objects
+                        $.mobile.changePage("list.html");
+                        
+                        // hide the loading animation
+                        $.mobile.hidePageLoadingMsg();	
+                        
+                        // tell the console
+                        Kii.logger("User registered: " + user);
+                    },
+                    
+                    // callback for failed registration
+                    failure: function(theUser, anErrorString) {
+
+                        // hide the loading animation
+                        $.mobile.hidePageLoadingMsg();	
+                        
+                        // tell the user
+                        alert("Unable to register: " + anErrorString);
+                        
+                        // tell the console
+                        Kii.logger("Unable to register user: " + anErrorString);
+                    }
+                });
+
+            }
+        
+            // the user clicked the 'sign in' button
+            function performLogin() {
+            
+                // show a loading animation
+                $.mobile.showPageLoadingMsg();	
+                
+                // get the user credentials from the UI
+                var username = $("#username").val();
+                var password = $("#password").val();
+
+                // perform the asynchronous authentication, with callbacks defined
+                KiiUser.authenticate(username, password, {
+
+                    // callback for successful authentication
+                    success: function(theAuthedUser) {
+                    
+                        // show the list of objects
+                        $.mobile.changePage("list.html");
+                        
+                        // hide the loading animation
+                        $.mobile.hidePageLoadingMsg();	
+                        
+                        // tell the console
+                        Kii.logger("User authenticated: " + user);
+                    },
+                    
+                    // callback for failed registration
+                    failure: function(theUser, anErrorString) {
+
+                        // hide the loading animation
+                        $.mobile.hidePageLoadingMsg();	
+                        
+                        // tell the user
+                        alert("Unable to register: " + anErrorString);
+                        
+                        // tell the console
+                        Kii.logger("Unable to register user: " + anErrorString);
+                    }
+                });
+
+            }
+        
+            $(document).ready(function() {
+            
+                // initialize the Kii SDK!
+                Kii.initialize("sandbox", "dummy");
+                Kii.setLogging(true);
+                Kii.setBaseURL("http://dev-ufe-jp.internal.kii.com:12090");
+            
+                // bind clicks to our login/sign up methods
+                $("#register-button").click(performRegistration);
+                $("#login-button").click(performLogin);
+                
+                $("#username").val(randomString(10));
+                $("#password").val(randomString(10));
+
+            });
+            
+        </script>
+	
+    </head>
+    
+    <body>
+    
+        <!-- START PAGE -->
+        <div data-role="page" data-theme="c">
+            
+            <!-- START HEADER -->
+            <div data-role="header" data-theme="c">
+                <h1>Get Started!</h1>
+            </div>
+            <!-- END HEADER -->
+            
+            <!-- START CONTENT -->
+            <div data-role="content">	
+            
+                <div style="margin:18px;">
+                    <label for="basic">Enter a Username:</label>
+                    <input id="username" type="text" name="name" id="basic" value=""  />                
+                </div>
+            
+                <div style="margin:18px;">
+                    <label for="basic">Enter a Password:</label>
+                    <input id="password" type="password" name="name" id="basic" value=""  />
+                </div>
+                
+                <div style="margin:32px 18px;">
+                    <a href="#" id="register-button" data-role="button" data-theme="e" style="margin-bottom:20px;">Register</a>
+                    <a href="#" id="login-button" data-role="button" data-theme="b">Log In</a>                
+                </div>
+                
+            </div>
+            <!-- END CONTENT -->
+            
+            
+        </div>
+        <!-- END PAGE -->
+
+        
+    </body>
+
+</html>
