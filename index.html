@@ -112,11 +112,12 @@
             }
         
             $(document).ready(function() {
-            
+            	// 
+            	//
                 // initialize the Kii SDK!
-                Kii.initialize("sandbox", "dummy");
+                Kii.initialize("__KII_APP_ID__", "__KII_APP_KEY__");
                 Kii.setLogging(true);
-                Kii.setBaseURL("http://dev-ufe-jp.internal.kii.com:12090");
+                Kii.setBaseURL("__KII_API_URL__");
             
                 // bind clicks to our login/sign up methods
                 $("#register-button").click(performRegistration);
