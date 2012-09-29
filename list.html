@@ -19,7 +19,7 @@
             
             // add the title/subtitle text
             $(link).append("<h3>"+obj.get(KEY_NAME)+"</h3>");
-            $(link).append("<p>"+obj.created+"</p>");
+            $(link).append("<p>"+obj.getCreated()+"</p>");
             
             // build the element
             $(row).append(link);
@@ -29,7 +29,7 @@
             
             // build the element
             $(deleteLink).append("<h3>"+obj.get(KEY_NAME)+"</h3>");
-            $(deleteLink).append("<p>"+obj.created+"</p>");
+            $(deleteLink).append("<p>"+obj.getCreated()+"</p>");
             
             // append the delete button to the row
             $(row).append(deleteLink);

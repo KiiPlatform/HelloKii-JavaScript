@@ -3,13 +3,10 @@
   var KiiRequest, KiiUtilities, root, _Kii, _KiiSocialConnect,
     __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
     __hasProp = {}.hasOwnProperty,
-    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; },
+    _this = this;
 
   root = typeof exports !== "undefined" && exports !== null ? exports : this;
-
-  Function.prototype.define = function(prop, desc) {
-    return Object.defineProperty(this.prototype, prop, desc);
-  };
 
   root.KiiSocialNetworkName = {
     FACEBOOK: 1
@@ -239,7 +236,13 @@
 
 
   root.KiiACL = (function() {
-    var _thisACL;
+    var _entries, _parent, _thisACL;
+
+    _thisACL = null;
+
+    _entries = null;
+
+    _parent = null;
 
     function KiiACL() {
       this.save = __bind(this.save, this);
@@ -256,48 +259,47 @@
 
       this.aclPath = __bind(this.aclPath, this);
 
+      this._setParent = __bind(this._setParent, this);
+      this._entries = [];
     }
 
-    _thisACL = null;
-
-    KiiACL.prototype._className = "KiiACL";
-
-    KiiACL.prototype._entries = [];
-
-    KiiACL.prototype._parent = null;
+    KiiACL.prototype._setParent = function(_parent) {
+      this._parent = _parent;
+    };
 
     KiiACL.prototype.aclPath = function() {
-      var bucket, bucketName, group, object, objectId, path, user;
-      if (this._parent._className === "KiiObject") {
+      var bucket, bucketName, className, group, object, objectId, path, user;
+      className = KiiUtilities.getObjectClass(this._parent);
+      if (className === "KiiObject") {
         object = this._parent;
-        if (object.bucket.user != null) {
-          user = object.bucket.user;
-        } else if (object.bucket.group != null) {
-          group = object.bucket.group;
+        if (object.getBucket().getUser() != null) {
+          user = object.getBucket().getUser();
+        } else if (object.getBucket().getGroup() != null) {
+          group = object.getBucket().getGroup();
         }
-        bucketName = object.bucket.name;
-        objectId = object.uuid;
-      } else if (this._parent._className === "KiiBucket") {
+        bucketName = object.getBucket().getBucketName();
+        objectId = object.getUUID();
+      } else if (className === "KiiBucket") {
         bucket = this._parent;
-        if (bucket.user != null) {
-          user = bucket.user;
-        } else if (bucket.group != null) {
-          group = bucket.group;
+        if (bucket.getUser() != null) {
+          user = bucket.getUser();
+        } else if (bucket.getGroup() != null) {
+          group = bucket.getGroup();
         }
-        bucketName = bucket.name;
+        bucketName = bucket.getBucketName();
       } else {
         Kii.error("Invalid ACL parent. Must belong to a KiiObject");
       }
       path = "/";
       if (group != null) {
-        path += "groups/" + group.uuid;
+        path += "groups/" + (group.getUUID()) + "/";
       } else if (user != null) {
-        path += "users/" + user.uuid;
+        path += "users/" + (user.getUUID()) + "/";
       }
       if (objectId != null) {
-        path += "/buckets/" + bucketName + "/objects/" + objectId + "/acl";
+        path += "buckets/" + bucketName + "/objects/" + objectId + "/acl";
       } else {
-        path += "/buckets/" + bucketName + "/acl";
+        path += "buckets/" + bucketName + "/acl";
       }
       return path;
     };
@@ -307,20 +309,16 @@
         _this = this;
       path = "" + (this.aclPath()) + "/" + (aclEntry.getActionString()) + "/" + (aclEntry.getEntityString());
       request = new KiiRequest(path, true);
-      request.method = aclEntry.grant === true ? "PUT" : "DELETE";
+      request.setMethod(aclEntry.getGrant() === true ? "PUT" : "DELETE");
       saveCallbacks = {
         success: function(data, statusCode) {
           if (statusCode < 300 && statusCode >= 200) {
-            aclEntry.updated = true;
             return callback();
           } else {
             return callback();
           }
         },
         failure: function(error, statusCode, errorCode) {
-          if (errorCode === "ACL_ALREADY_EXISTS") {
-            aclEntry.updated = true;
-          }
           return callback();
         }
       };
@@ -462,7 +460,7 @@
     KiiACL.aclWithParent = function(parent) {
       var acl;
       acl = new KiiACL();
-      acl._parent = parent;
+      acl._setParent(parent);
       return acl;
     };
 
@@ -485,48 +483,115 @@
 
 
   root.KiiACLEntry = (function() {
+    var _action, _grant, _subject;
+
+    _action = null;
+
+    _subject = null;
+
+    _grant = null;
 
     function KiiACLEntry() {
       this.getEntityString = __bind(this.getEntityString, this);
 
       this.getActionString = __bind(this.getActionString, this);
 
+      this.getGrant = __bind(this.getGrant, this);
+
+      this.setGrant = __bind(this.setGrant, this);
+
+      this.getSubject = __bind(this.getSubject, this);
+
       this.setSubject = __bind(this.setSubject, this);
 
+      this.getAction = __bind(this.getAction, this);
+
       this.setAction = __bind(this.setAction, this);
-
+      this._action = -1;
+      this._grant = true;
     }
-
-    KiiACLEntry.prototype._updated = false;
 
     /** The action that is being permitted/restricted. Possible values:
     <br><br>
-    KiiACLBucketActionCreateObjects,<br>
-    KiiACLBucketActionQueryObjects,	 <br>
-    KiiACLBucketActionDropBucket,<br>
-    KiiACLObjectActionRead,<br>
-    KiiACLObjectActionWrite
+    KiiACLAction.KiiACLBucketActionCreateObjects,<br>
+    KiiACLAction.KiiACLBucketActionQueryObjects,  <br>
+    KiiACLAction.KiiACLBucketActionDropBucket,<br>
+    KiiACLAction.KiiACLObjectActionRead,<br>
+    KiiACLAction.KiiACLObjectActionWrite
+    @param {KiiACLAction} value The action being permitted/restricted
+    @throws {InvalidACLAction} If the value is not one of the permitted values
     */
 
 
-    KiiACLEntry.prototype.action = -1;
+    KiiACLEntry.prototype.setAction = function(value) {
+      if (value >= KiiACLAction.KiiACLBucketActionCreateObjects && value <= KiiACLAction.KiiACLObjectActionWrite) {
+        return this._action = value;
+      } else {
+        throw new InvalidACLAction;
+      }
+    };
+
+    /** Get the action that is being permitted/restricted in this entry
+    @returns {KiiACLAction}
+    */
+
+
+    KiiACLEntry.prototype.getAction = function() {
+      return this._action;
+    };
 
     /** The KiiUser or KiiGroup entity that is being permitted/restricted
+    @param {KiiUser|KiiGroup} value The entity being permitted/restricted
+    @throws {InvalidACLSubject} If the value is not one of the permitted values
     */
 
 
-    KiiACLEntry.prototype.subject = null;
+    KiiACLEntry.prototype.setSubject = function(value) {
+      var type;
+      type = KiiUtilities.getObjectClass(value);
+      if (type === "KiiGroup" || type === "KiiUser" || type === "KiiAnyAuthenticatedUser" || type === "KiiAnonymousUser") {
+        return this._subject = value;
+      } else {
+        throw new InvalidACLSubject;
+      }
+    };
 
-    /** When TRUE, the associated action is granted. When FALSE, the action is restricted
+    /** Get the subject that is being permitted/restricted in this entry
+    @returns {KiiUser|KiiGroup}
     */
 
 
-    KiiACLEntry.prototype.grant = true;
+    KiiACLEntry.prototype.getSubject = function() {
+      return this._subject;
+    };
+
+    /** Set whether or not the action is being permitted to the subject
+    @param {Boolean} value true if the action is permitted, false otherwise
+    @throws {InvalidACLGrant} If the value is not a boolean type
+    */
+
+
+    KiiACLEntry.prototype.setGrant = function(value) {
+      if (value === true || value === false) {
+        return this._grant = value;
+      } else {
+        throw new InvalidACLGrant;
+      }
+    };
+
+    /** Get whether or not the action is being permitted to the subject
+    @returns {Boolean}
+    */
+
+
+    KiiACLEntry.prototype.getGrant = function() {
+      return this._grant;
+    };
 
     /** Create a KiiACLEntry object with a subject and action
     
     The entry will not be applied on the server until the KiiACL object is explicitly saved. This method simply returns a working KiiACLEntry with a specified subject and action.
-    @param {KiiGroup|KiiUser} subject A KiiGroup or KiiUser object to which the action/grant is being applied
+    @param {KiiGroup|KiiUser|KiiAnyAuthenticatedUser|KiiAnonymousUser} subject A KiiGroup or KiiUser object to which the action/grant is being applied
     @param {KiiACLAction} action One of the specified KiiACLAction values the permissions is being applied to
     @return A KiiACLEntry object with the specified attributes
     */
@@ -534,28 +599,17 @@
 
     KiiACLEntry.entryWithSubject = function(subject, action) {
       var entry;
+      Kii.logger("EWS: " + subject + ", " + action);
       entry = new KiiACLEntry();
       entry.setSubject(subject);
       entry.setAction(action);
       return entry;
     };
 
-    KiiACLEntry.prototype.setAction = function(value) {
-      return this.action = value;
-    };
-
-    KiiACLEntry.prototype.setSubject = function(value) {
-      if (value._className === "KiiGroup" || value._className === "KiiUser") {
-        return this.subject = value;
-      } else {
-        return Kii.error("Invalid ACL Subject - must be of class KiiUser or KiiGroup");
-      }
-    };
-
     KiiACLEntry.prototype.getActionString = function() {
       var retString;
       Kii.logger("Action: " + this.action);
-      switch (this.action) {
+      switch (this._action) {
         case KiiACLAction.KiiACLBucketActionCreateObjects:
           retString = "CREATE_OBJECTS_IN_BUCKET";
           break;
@@ -578,13 +632,20 @@
     };
 
     KiiACLEntry.prototype.getEntityString = function() {
-      var entityId, type;
-      if (this.subject._className === "KiiGroup") {
-        entityId = this.subject.uuid;
+      var entityId, subjectType, type;
+      subjectType = KiiUtilities.getObjectClass(this._subject);
+      if (subjectType === "KiiGroup") {
+        entityId = this._subject.getUUID();
         type = "GroupID";
-      } else if (this.subject._className === "KiiUser") {
-        entityId = this.subject.uuid;
+      } else if (subjectType === "KiiUser") {
+        entityId = this._subject.getUUID();
         type = "UserID";
+      } else if (subjectType === "KiiAnyAuthenticatedUser") {
+        type = "UserID";
+        entityId = "ANY_AUTHENTICATED_USER";
+      } else if (subjectType === "KiiAnonymousUser") {
+        type = "UserID";
+        entityId = "ANONYMOUS_USER";
       }
       return "" + type + ":" + entityId;
     };
@@ -600,10 +661,14 @@
 
 
   root.KiiBucket = (function() {
-    var _thisBucket;
+    var _bucketName, _group, _thisBucket, _user;
 
     function KiiBucket() {
       this.objectWithJSON = __bind(this.objectWithJSON, this);
+
+      this._generatePath = __bind(this._generatePath, this);
+
+      this["delete"] = __bind(this["delete"], this);
 
       this.executeQuery = __bind(this.executeQuery, this);
 
@@ -613,22 +678,58 @@
 
       this.createObject = __bind(this.createObject, this);
 
+      this._setBucketName = __bind(this._setBucketName, this);
+
+      this.getBucketName = __bind(this.getBucketName, this);
+
+      this._setGroup = __bind(this._setGroup, this);
+
+      this.getGroup = __bind(this.getGroup, this);
+
+      this._setUser = __bind(this._setUser, this);
+
+      this.getUser = __bind(this.getUser, this);
+
     }
 
     KiiBucket.prototype._className = "KiiBucket";
 
     _thisBucket = null;
 
-    KiiBucket.prototype.user = null;
+    _bucketName = null;
 
-    KiiBucket.prototype.group = null;
+    _user = null;
+
+    _group = null;
+
+    KiiBucket.prototype.getUser = function() {
+      return this._user;
+    };
+
+    KiiBucket.prototype._setUser = function(_user) {
+      this._user = _user;
+    };
+
+    KiiBucket.prototype.getGroup = function() {
+      return this._group;
+    };
+
+    KiiBucket.prototype._setGroup = function(_group) {
+      this._group = _group;
+    };
 
     /** The name of this bucket 
-    @type String
+    @returns {String}
     */
 
 
-    KiiBucket.prototype.name = null;
+    KiiBucket.prototype.getBucketName = function() {
+      return this._bucketName;
+    };
+
+    KiiBucket.prototype._setBucketName = function(_bucketName) {
+      this._bucketName = _bucketName;
+    };
 
     /** Create a KiiObject within the current bucket
     
@@ -683,49 +784,58 @@
     @example 
     var bucket = . . .; // a KiiBucket
     var queryObject = . . .; // a KiiQuery
-    bucket.query(queryObject, {
-        success: function(queryPerformed, resultSet) {
+    
+    // define the callbacks (stored in a variable for reusability)
+    var queryCallbacks = {
+        success: function(queryPerformed, resultSet, nextQuery) {
             // do something with the results
             for(var i=0; i&lt;resultSet.length; i++) {
                 // do something with the object
                 // resultSet[i]; // could be KiiObject, KiiGroup, KiiUser, etc
+            }
+    
+            // if there are more results to be retrieved
+            if(nextQuery != null) {
+                
+                // get them and repeat recursively until no results remain
+                bucket.executeQuery(nextQuery, queryCallbacks);
             }
         },
         
         failure: function(queryPerformed, anErrorString) {
             // do something with the error response
         }
-    });
+    };
+    
+    bucket.executeQuery(queryObject, queryCallbacks);
     */
 
 
     KiiBucket.prototype.executeQuery = function(query, callbacks) {
-      var data, executeCallbacks, path, request,
+      var clauseData, data, executeCallbacks, path, request,
         _this = this;
       _thisBucket = this;
-      if (this.user != null) {
-        path = "/users/" + this.user.uuid + "/buckets/" + this.name + "/query";
-      } else if (this.group != null) {
-        path = "/users/" + this.group.uuid + "/buckets/" + this.name + "/query";
-      } else {
-        path = "/buckets/" + this.name + "/query";
-      }
+      path = this._generatePath() + "/query";
+      data = {};
       if (query != null) {
-        data = query.dictValue();
+        clauseData = query._dictValue();
+        data.bestEffortLimit = query.getLimit();
+        if (query.getPaginationKey() != null) {
+          data.paginationKey = query.getPaginationKey();
+        }
       } else {
-        data = {
-          "clause": KiiQuery.emptyDictValue()
+        clauseData = {
+          "clause": KiiQuery._emptyDictValue()
         };
       }
       request = new KiiRequest(path, true);
-      request.method = "POST";
-      request.contentType = "application/vnd.kii.QueryRequest+json";
-      request.data = {
-        bucketQuery: data
-      };
+      request.setMethod("POST");
+      request.setContentType("application/vnd.kii.QueryRequest+json");
+      data.bucketQuery = clauseData;
+      request.setData(data);
       executeCallbacks = {
         success: function(data, statusCode) {
-          var result, resultSet, _i, _len, _ref;
+          var nextQuery, result, resultSet, _i, _len, _ref;
           if (statusCode < 300 && statusCode >= 200) {
             resultSet = [];
             _ref = data.results;
@@ -733,8 +843,12 @@
               result = _ref[_i];
               resultSet.push(_thisBucket.objectWithJSON(result));
             }
+            if (data.nextPaginationKey != null) {
+              nextQuery = jQuery.extend(true, {}, query);
+              nextQuery.setPaginationKey(data.nextPaginationKey);
+            }
             if (callbacks != null) {
-              return callbacks.success(query, resultSet);
+              return callbacks.success(query, resultSet, nextQuery);
             }
           } else if (callbacks != null) {
             return callbacks.failure(query, "Unable to parse response");
@@ -749,18 +863,71 @@
       return request.execute(executeCallbacks, false);
     };
 
+    /** Delete the given bucket from the server
+    
+    @param Object callbacks An object with callback methods defined
+    @param {Method} callbacks.success The callback method to call on a successful query request
+    @param {Method} callbacks.failure The callback method to call on a failed query request
+    @example 
+    var bucket = . . .; // a KiiBucket
+    bucket.delete({
+        success: function(deletedBucket) {
+            // do something with the result
+        },
+        
+        failure: function(bucketToDelete, anErrorString) {
+            // do something with the error response
+        }
+    });
+    */
+
+
+    KiiBucket.prototype["delete"] = function(callbacks) {
+      var executeCallbacks, request,
+        _this = this;
+      _thisBucket = this;
+      request = new KiiRequest(this._generatePath(), true);
+      request.setMethod("DELETE");
+      executeCallbacks = {
+        success: function(data, statusCode) {
+          if (callbacks != null) {
+            return callbacks.success(_thisBucket);
+          }
+        },
+        failure: function(error, statusCode) {
+          if (callbacks != null) {
+            return callbacks.failure(_thisBucket, error);
+          }
+        }
+      };
+      return request.execute(executeCallbacks, true);
+    };
+
     KiiBucket.bucketWithName = function(bucketName, parent) {
-      var bucket;
+      var bucket, className;
       bucket = new KiiBucket;
-      bucket.name = bucketName;
+      bucket._setBucketName(bucketName);
       if (parent != null) {
-        if (parent._className === "KiiGroup") {
-          bucket.group = parent;
-        } else if (parent._className === "KiiUser") {
-          bucket.user = parent;
+        className = KiiUtilities.getObjectClass(parent);
+        if (className === "KiiGroup") {
+          bucket._setGroup(parent);
+        } else if (className === "KiiUser") {
+          bucket._setUser(parent);
         }
       }
       return bucket;
+    };
+
+    KiiBucket.prototype._generatePath = function() {
+      var path;
+      if (this._user != null) {
+        path = "/users/" + (this._user.getUUID()) + "/buckets/" + this._bucketName;
+      } else if (this._group != null) {
+        path = "/users/" + (this._group.getUUID()) + "/buckets/" + this._bucketName;
+      } else {
+        path = "/buckets/" + this._bucketName;
+      }
+      return path;
     };
 
     KiiBucket.prototype.objectWithJSON = function(json) {
@@ -781,7 +948,25 @@
 
 
   root.KiiGroup = (function() {
-    var _addMembers, _removeMembers, _thisGroup;
+    var _addMembers, _groupName, _owner, _removeMembers, _thisGroup;
+
+    _thisGroup = null;
+
+    _groupName = null;
+
+    _owner = null;
+
+    _addMembers = null;
+
+    _removeMembers = null;
+
+    KiiGroup.prototype._getAddMembers = function() {
+      return this._addMembers;
+    };
+
+    KiiGroup.prototype._getRemoveMembers = function() {
+      return this._removeMembers;
+    };
 
     function KiiGroup() {
       this.getOwner = __bind(this.getOwner, this);
@@ -810,36 +995,77 @@
 
       this.objectURI = __bind(this.objectURI, this);
 
+      this._setOwner = __bind(this._setOwner, this);
+
+      this.getOwner = __bind(this.getOwner, this);
+
+      this._setName = __bind(this._setName, this);
+
+      this.getName = __bind(this.getName, this);
+
+      this._setUUID = __bind(this._setUUID, this);
+
+      this.getUUID = __bind(this.getUUID, this);
+
+      this._setAddMembers = __bind(this._setAddMembers, this);
+
+      this._getRemoveMembers = __bind(this._getRemoveMembers, this);
+
+      this._getAddMembers = __bind(this._getAddMembers, this);
+      this._addMembers = [];
+      this._removeMembers = [];
     }
 
-    _thisGroup = null;
+    KiiGroup.prototype._setAddMembers = function(members) {
+      var member, _i, _len, _results;
+      if (members != null) {
+        _results = [];
+        for (_i = 0, _len = members.length; _i < _len; _i++) {
+          member = members[_i];
+          _results.push(this._addMembers.push(member));
+        }
+        return _results;
+      }
+    };
 
-    KiiGroup.prototype._className = "KiiGroup";
-
-    _addMembers = [];
-
-    _removeMembers = [];
-
-    /** The UUID of the given group, assigned by the server
-    @type String
+    /** Get the UUID of the given group, assigned by the server
+    @returns {String}
     */
 
 
-    KiiGroup.prototype.uuid = null;
+    KiiGroup.prototype.getUUID = function() {
+      return this._uuid;
+    };
 
-    /** The name of this group
-    @type String
+    KiiGroup.prototype._setUUID = function(_uuid) {
+      this._uuid = _uuid;
+    };
+
+    /** The name of this group 
+    @returns {String}
     */
 
 
-    KiiGroup.prototype.name = null;
+    KiiGroup.prototype.getName = function() {
+      return this._groupName;
+    };
 
-    /** The creator of this group
-    @type KiiUser
+    KiiGroup.prototype._setName = function(_groupName) {
+      this._groupName = _groupName;
+    };
+
+    /** Get the creator of this group
+    @returns {KiiUser}
     */
 
 
-    KiiGroup.prototype.owner = null;
+    KiiGroup.prototype.getOwner = function() {
+      return this._owner;
+    };
+
+    KiiGroup.prototype._setOwner = function(_owner) {
+      this._owner = _owner;
+    };
 
     /** Get a specifically formatted string referencing the group
     
@@ -852,8 +1078,8 @@
 
 
     KiiGroup.prototype.objectURI = function() {
-      if (this.uuid != null) {
-        return "kiicloud://groups/" + this.uuid;
+      if (this._uuid != null) {
+        return "kiicloud://groups/" + this._uuid;
       } else {
         return null;
       }
@@ -888,12 +1114,12 @@
 
     KiiGroup.prototype.addUser = function(member) {
       var ndx;
-      if ($.inArray(member, _addMembers === -1)) {
-        _addMembers.push(member);
+      if ($.inArray(member, this._addMembers === -1)) {
+        this._addMembers.push(member);
       }
-      ndx = $.inArray(member, _removeMembers);
+      ndx = $.inArray(member, this._removeMembers);
       if (ndx >= 0) {
-        return KiiUtilities.arrayRemove(_removeMembers, ndx, ndx);
+        return KiiUtilities.arrayRemove(this._removeMembers, ndx, ndx);
       }
     };
 
@@ -911,12 +1137,12 @@
 
     KiiGroup.prototype.removeUser = function(member) {
       var ndx;
-      if ($.inArray(member, _removeMembers === -1)) {
-        _removeMembers.push(member);
+      if ($.inArray(member, this._removeMembers === -1)) {
+        this._removeMembers.push(member);
       }
-      ndx = $.inArray(member, _addMembers);
+      ndx = $.inArray(member, this._addMembers);
       if (ndx >= 0) {
-        return KiiUtilities.arrayRemove(_addMembers, ndx, ndx);
+        return KiiUtilities.arrayRemove(this._addMembers, ndx, ndx);
       }
     };
 
@@ -924,20 +1150,20 @@
       var memberCallbacks, request,
         _this = this;
       _thisGroup = this;
-      Kii.logger("Adding member " + member.uuid + " to group " + this.name);
-      request = new KiiRequest("/groups/" + this.uuid + "/members/" + member.uuid, true);
-      request.method = "PUT";
+      Kii.logger("Adding member " + (member.getUUID()) + " to group " + this._groupName);
+      request = new KiiRequest("/groups/" + this._uuid + "/members/" + (member.getUUID()), true);
+      request.setMethod("PUT");
       memberCallbacks = {
         success: function(data, statusCode) {
           var ndx;
-          ndx = $.inArray(member, _addMembers);
-          KiiUtilities.arrayRemove(_addMembers, ndx, ndx);
+          ndx = $.inArray(member, _thisGroup._getAddMembers());
+          KiiUtilities.arrayRemove(_thisGroup._getAddMembers(), ndx, ndx);
           return callback();
         },
         failure: function(error, statusCode) {
           var ndx;
-          ndx = $.inArray(member, _addMembers);
-          KiiUtilities.arrayRemove(_addMembers, ndx, ndx);
+          ndx = $.inArray(member, _thisGroup._getAddMembers());
+          KiiUtilities.arrayRemove(_thisGroup._getAddMembers(), ndx, ndx);
           return callback();
         }
       };
@@ -948,20 +1174,20 @@
       var removeCallbacks, request,
         _this = this;
       _thisGroup = this;
-      Kii.logger("Removing member " + member.uuid + " to group " + this.name);
-      request = new KiiRequest("/groups/" + this.uuid + "/members/" + member.uuid, true);
-      request.method = "DELETE";
+      Kii.logger("Removing member " + (member.getUUID()) + " to group " + this._groupName);
+      request = new KiiRequest("/groups/" + this._uuid + "/members/" + (member.getUUID()), true);
+      request.setMethod("DELETE");
       removeCallbacks = {
         success: function(data, statusCode) {
           var ndx;
-          ndx = $.inArray(member, _removeMembers);
-          KiiUtilities.arrayRemove(_removeMembers, ndx, ndx);
+          ndx = $.inArray(member, _thisGroup._getRemoveMembers());
+          KiiUtilities.arrayRemove(_thisGroup._getRemoveMembers(), ndx, ndx);
           return callback();
         },
         failure: function(error, statusCode) {
           var ndx;
-          ndx = $.inArray(member, _removeMembers);
-          KiiUtilities.arrayRemove(_removeMembers, ndx, ndx);
+          ndx = $.inArray(member, _thisGroup._getRemoveMembers());
+          KiiUtilities.arrayRemove(_thisGroup._getRemoveMembers(), ndx, ndx);
           return callback();
         }
       };
@@ -993,9 +1219,9 @@
       var listCallbacks, request,
         _this = this;
       _thisGroup = this;
-      Kii.logger("Getting member list for group " + this.name);
-      request = new KiiRequest("/groups/" + this.uuid + "/members", true);
-      request.accept = "application/vnd.kii.MembersRetrievalResponse+json";
+      Kii.logger("Getting member list for group " + this._groupName);
+      request = new KiiRequest("/groups/" + this._uuid + "/members", true);
+      request.setAccept("application/vnd.kii.MembersRetrievalResponse+json");
       listCallbacks = {
         success: function(data, statusCode) {
           var member, memberList, _i, _len, _ref;
@@ -1023,18 +1249,20 @@
     };
 
     KiiGroup.prototype._saveMembers = function(callbacks) {
-      var member, _i, _j, _len, _len1,
+      var member, _i, _j, _len, _len1, _ref, _ref1,
         _this = this;
       _thisGroup = this;
-      for (_i = 0, _len = _removeMembers.length; _i < _len; _i++) {
-        member = _removeMembers[_i];
+      _ref = this._removeMembers;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        member = _ref[_i];
         this._removeMember(member, function() {
           return _thisGroup._saveMembers(callbacks);
         });
         return;
       }
-      for (_j = 0, _len1 = _addMembers.length; _j < _len1; _j++) {
-        member = _addMembers[_j];
+      _ref1 = this._addMembers;
+      for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
+        member = _ref1[_j];
         this._addMember(member, function() {
           return _thisGroup._saveMembers(callbacks);
         });
@@ -1068,15 +1296,15 @@
         _this = this;
       _thisGroup = this;
       Kii.logger("Saving group: " + this.name);
-      if (this.uuid != null) {
-        request = new KiiRequest("/groups/" + this.uuid + "/name", true);
-        request.contentType = "text/plain";
-        request.method = "PUT";
-        request.data = newName;
+      if (this._uuid != null) {
+        request = new KiiRequest("/groups/" + this._uuid + "/name", true);
+        request.setContentType("text/plain");
+        request.setMethod("PUT");
+        request.setData(newName);
         saveCallbacks = {
           success: function(data, statusCode) {
             if (statusCode < 300 && statusCode >= 200) {
-              _thisGroup.name = newName;
+              _thisGroup._setName(newName);
               if (callbacks != null) {
                 return callbacks.success(_thisGroup);
               }
@@ -1121,23 +1349,23 @@
         _this = this;
       _thisGroup = this;
       Kii.logger("Saving group: " + this.name);
-      if (!(this.uuid != null)) {
+      if (!(this._uuid != null)) {
         request = new KiiRequest("/groups", true);
-        request.contentType = "application/vnd.kii.GroupCreationRequest+json";
-        request.method = "POST";
+        request.setContentType("application/vnd.kii.GroupCreationRequest+json");
+        request.setMethod("POST");
         data = {};
-        if (this.name != null) {
-          data.name = this.name;
+        if (this._groupName != null) {
+          data.name = this._groupName;
         }
         if (Kii.getCurrentUser() != null) {
-          this.owner = Kii.getCurrentUser();
-          data.owner = this.owner.uuid;
+          this._owner = Kii.getCurrentUser();
+          data.owner = this._owner.getUUID();
         }
-        request.data = data;
+        request.setData(data);
         saveCallbacks = {
           success: function(data, statusCode) {
             if (statusCode < 300 && statusCode >= 200) {
-              _thisGroup.uuid = data.groupID;
+              _thisGroup._setUUID(data.groupID);
               return _thisGroup._saveMembers(callbacks);
             }
           },
@@ -1177,23 +1405,17 @@
       var refreshCallbacks, request,
         _this = this;
       _thisGroup = this;
-      Kii.logger("Refreshing group: " + this.name);
-      request = new KiiRequest("/groups/" + this.uuid, true);
-      request.accept = "application/vnd.kii.GroupRetrievalResponse+json";
+      Kii.logger("Refreshing group: " + this._groupName);
+      request = new KiiRequest("/groups/" + this._uuid, true);
+      request.setAccept("application/vnd.kii.GroupRetrievalResponse+json");
       refreshCallbacks = {
         success: function(data, statusCode) {
-          Kii.logger("succ");
-          if (statusCode < 300 && statusCode >= 200) {
-            _thisGroup = KiiGroup.groupWithJSON(data);
-            Kii.logger("got something: ");
-            Kii.logger(data);
-            if (callbacks != null) {
-              return callbacks.success(_thisGroup);
-            }
+          _thisGroup = KiiGroup.groupWithJSON(data);
+          if (callbacks != null) {
+            return callbacks.success(_thisGroup);
           }
         },
         failure: function(error, statusCode) {
-          Kii.logger("fail " + error);
           if (callbacks != null) {
             return callbacks.failure(_thisGroup, error);
           }
@@ -1224,9 +1446,9 @@
       var deleteCallbacks, request,
         _this = this;
       _thisGroup = this;
-      Kii.logger("Deleting group: " + this.name);
-      request = new KiiRequest("/groups/" + this.uuid, true);
-      request.method = "DELETE";
+      Kii.logger("Deleting group: " + this._groupName);
+      request = new KiiRequest("/groups/" + this._uuid, true);
+      request.setMethod("DELETE");
       deleteCallbacks = {
         success: function(data, statusCode) {
           if (statusCode < 300 && statusCode >= 200 && (callbacks != null)) {
@@ -1266,11 +1488,11 @@
     KiiGroup.prototype.getOwner = function(member, callbacks) {
       var _this = this;
       _thisGroup = this;
-      Kii.logger("Getting owner of group " + this.name);
+      Kii.logger("Getting owner of group " + this._groupName);
       return this.refresh({
         success: function(group) {
           if (callbacks != null) {
-            return callbacks.success(group, group.owner);
+            return callbacks.success(group, group.getOwner());
           }
         },
         failure: function(group, error) {
@@ -1305,14 +1527,15 @@
     KiiGroup.groupWithNameAndMembers = function(groupName, members) {
       var group;
       group = new KiiGroup();
-      group.name = groupName;
-      group._addMembers = members;
+      group._setName(groupName);
+      group._setAddMembers(members);
       return group;
     };
 
     /** Generate a new KiiGroup based on a given URI
     @param {String} uri The URI of the group to be represented
     @returns {KiiGroup} A new KiiGroup with its parameters filled in from the URI
+    @throws {InvalidURIException} If the URI given is invalid
     @example
     var group = new KiiGroup.groupWithURI("kiicloud://myuri");
     */
@@ -1326,9 +1549,9 @@
       compLength = components.length;
       if (compLength > 0) {
         group = new KiiGroup();
-        group.uuid = components[compLength - 1];
+        group._setUUID(components[compLength - 1]);
       } else {
-        Kii.error("Invalid URI: " + uri);
+        throw new InvalidURIException;
       }
       return group;
     };
@@ -1336,7 +1559,7 @@
     KiiGroup.groupWithID = function(id) {
       var group;
       group = new KiiGroup();
-      group.uuid = id;
+      group._setUUID(id);
       return group;
     };
 
@@ -1344,13 +1567,13 @@
       var group;
       group = new KiiGroup();
       if (json.groupID != null) {
-        group.uuid = json.groupID;
+        group._setUUID(json.groupID);
       }
       if (json.name != null) {
-        group.name = json.name;
+        group._setName(json.name);
       }
       if (json.owner != null) {
-        group.owner = KiiUser.userWithID(json.owner);
+        group._setOwner(KiiUser.userWithID(json.owner));
       }
       return group;
     };
@@ -1366,45 +1589,85 @@
 
 
   root.KiiObject = (function() {
-    var _thisObject;
+    var _bucket, _created, _customInfo, _modified, _objectType, _owner, _thisObject, _uuid;
 
     _thisObject = null;
 
-    KiiObject.prototype._className = "KiiObject";
-
     KiiObject.prototype._alteredFields = [];
 
-    KiiObject.prototype.bucket = null;
+    _uuid = null;
 
-    KiiObject.prototype.customInfo = null;
+    _created = null;
 
-    /** The UUID of the given group, assigned by the server
-    @type String
+    _modified = null;
+
+    _objectType = null;
+
+    _customInfo = null;
+
+    _bucket = null;
+
+    _owner = null;
+
+    /** Get the UUID of the given object, assigned by the server
+    @returns {String}
     */
 
 
-    KiiObject.prototype.uuid = null;
+    KiiObject.prototype.getUUID = function() {
+      return this._uuid;
+    };
 
-    /** The created date of the given object, assigned by the server 
-    @type Date
+    KiiObject.prototype._setUUID = function(_uuid) {
+      this._uuid = _uuid;
+    };
+
+    /** Get the server's creation date of this object
+    @returns {String}
     */
 
 
-    KiiObject.prototype.created = null;
+    KiiObject.prototype.getCreated = function() {
+      return this._created;
+    };
 
-    /** The modified date of the given object, assigned by the server 
-    @type Date
+    KiiObject.prototype._setCreated = function(_created) {
+      this._created = _created;
+    };
+
+    /** Get the modified date of the given object, assigned by the server 
+    @returns {String}
     */
 
 
-    KiiObject.prototype.modified = null;
+    KiiObject.prototype.getModified = function() {
+      return this._modified;
+    };
 
-    /** The application-defined type name of the object
-    @type String
+    KiiObject.prototype._setModified = function(_modified) {
+      this._modified = _modified;
+    };
+
+    /** Get the application-defined type name of the object
+    @returns {String}
     */
 
 
-    KiiObject.prototype.type = null;
+    KiiObject.prototype.getObjectType = function() {
+      return this._objectType;
+    };
+
+    KiiObject.prototype._setObjectType = function(_objectType) {
+      this._objectType = _objectType;
+    };
+
+    KiiObject.prototype.getBucket = function() {
+      return this._bucket;
+    };
+
+    KiiObject.prototype._setBucket = function(_bucket) {
+      this._bucket = _bucket;
+    };
 
     function KiiObject() {
       this["delete"] = __bind(this["delete"], this);
@@ -1426,8 +1689,45 @@
       this.get = __bind(this.get, this);
 
       this.set = __bind(this.set, this);
-      this.customInfo = {};
+
+      this._getPath = __bind(this._getPath, this);
+
+      this._setBucket = __bind(this._setBucket, this);
+
+      this.getBucket = __bind(this.getBucket, this);
+
+      this._setObjectType = __bind(this._setObjectType, this);
+
+      this.getObjectType = __bind(this.getObjectType, this);
+
+      this._setModified = __bind(this._setModified, this);
+
+      this.getModified = __bind(this.getModified, this);
+
+      this._setCreated = __bind(this._setCreated, this);
+
+      this.getCreated = __bind(this.getCreated, this);
+
+      this._setUUID = __bind(this._setUUID, this);
+
+      this.getUUID = __bind(this.getUUID, this);
+      this._customInfo = {};
     }
+
+    KiiObject.prototype._getPath = function() {
+      var path;
+      if (this._bucket.getUser() != null) {
+        path = "/users/" + (this._bucket.getUser().getUUID()) + "/buckets/" + (this._bucket.getBucketName()) + "/objects/";
+      } else if (this._bucket.getGroup() != null) {
+        path = "/groups/" + (this._bucket.getGroup().getUUID()) + "/buckets/" + (this._bucket.getBucketName()) + "/objects/";
+      } else {
+        path = "/buckets/" + (this._bucket.getBucketName()) + "/objects/";
+      }
+      if (this._uuid != null) {
+        path += this._uuid;
+      }
+      return path;
+    };
 
     /** Sets a key/value pair to a KiiObject
     
@@ -1441,7 +1741,7 @@
 
 
     KiiObject.prototype.set = function(key, value) {
-      this.customInfo[key] = value;
+      this._customInfo[key] = value;
       return this._alteredFields.push(key);
     };
 
@@ -1455,7 +1755,7 @@
 
 
     KiiObject.prototype.get = function(key) {
-      return this.customInfo[key];
+      return this._customInfo[key];
     };
 
     /** Get the ACL handle for this file
@@ -1485,14 +1785,14 @@
     KiiObject.prototype.objectURI = function() {
       var base, uri;
       base = "kiicloud://";
-      if ((this.bucket != null) && (this.uuid != null)) {
+      if ((this._bucket != null) && (this._uuid != null)) {
         uri = base;
-        if (this.bucket.group != null) {
-          uri += "groups/" + this.bucket.group.uuid;
-        } else if (this.bucket.user != null) {
-          uri += "users/" + this.bucket.user.uuid;
+        if (this._bucket.getGroup() != null) {
+          uri += "groups/" + (this._bucket.getGroup().getUUID()) + "/";
+        } else if (this._bucket.getUser() != null) {
+          uri += "users/" + (this._bucket.getUser().getUUID()) + "/";
         }
-        uri += "/buckets/" + this.bucket.name + "/objects/" + this.uuid;
+        uri += "buckets/" + (this._bucket.getBucketName()) + "/objects/" + this._uuid;
       }
       return uri;
     };
@@ -1504,17 +1804,17 @@
         val = json[key];
         if (key === "objectID" || key === "_id" || key === "uuid") {
           Kii.logger("Setting uuid: " + val);
-          _results.push(this.uuid = val);
+          _results.push(this._uuid = val);
         } else if (key === "createdAt" || key === "_created" || key === "created") {
-          _results.push(this.created = val);
+          _results.push(this._created = val);
         } else if (key === "modifiedAt" || key === "_modified" || key === "modified") {
-          _results.push(this.modified = val);
+          _results.push(this._modified = val);
         } else if (key === "_owner") {
-          _results.push(this.owner = KiiUser.userWithID(val));
+          _results.push(this._owner = KiiUser.userWithID(val));
         } else if (key === "_dataType") {
-          _results.push(this.type = val);
+          _results.push(this._objectType = val);
         } else if (key[0] !== "_") {
-          _results.push(this.customInfo[key] = val);
+          _results.push(this._customInfo[key] = val);
         } else {
           _results.push(void 0);
         }
@@ -1523,36 +1823,28 @@
     };
 
     KiiObject.prototype._performSave = function(allFields, callbacks) {
-      var key, path, request, saveCallbacks, _i, _len, _ref,
+      var data, key, path, request, saveCallbacks, _i, _len, _ref,
         _this = this;
       _thisObject = this;
-      if (this.bucket.user != null) {
-        path = "/users/" + this.bucket.user.uuid + "/buckets/" + this.bucket.name + "/objects/";
-      } else if (this.bucket.group != null) {
-        path = "/groups/" + this.bucket.group.uuid + "/buckets/" + this.bucket.name + "/objects/";
-      } else {
-        path = "/buckets/" + this.bucket.name + "/objects/";
-      }
-      if (this.uuid != null) {
-        path += this.uuid;
-      }
+      path = this._getPath();
       request = new KiiRequest(path, true);
-      request.method = this.uuid != null ? "PUT" : "POST";
+      request.setMethod(this._uuid != null ? "PUT" : "POST");
+      data = {};
       if (allFields) {
-        request.data = this.customInfo;
+        data = this._customInfo;
       } else {
-        request.data = {};
         _ref = this._alteredFields;
         for (_i = 0, _len = _ref.length; _i < _len; _i++) {
           key = _ref[_i];
-          request.data[key] = this.customInfo[key];
+          data[key] = this._customInfo[key];
         }
       }
-      if (this.type != null) {
-        request.contentType = "application/vnd." + (Kii.getAppID()) + "." + this.type + "+json";
+      request.setData(data);
+      if (this._objectType != null) {
+        request.setContentType("application/vnd." + (Kii.getAppID()) + "." + this._objectType + "+json");
       }
-      if ((this.uuid != null) && !allFields) {
-        request.headers["X-HTTP-Method-Override"] = "PATCH";
+      if ((this._uuid != null) && !allFields) {
+        request.addHeader("X-HTTP-Method-Override", "PATCH");
       }
       saveCallbacks = {
         success: function(data, statusCode) {
@@ -1647,14 +1939,7 @@
       var path, refreshCallbacks, request,
         _this = this;
       _thisObject = this;
-      if (this.bucket.user != null) {
-        path = "/users/" + this.bucket.user.uuid + "/buckets/" + this.bucket.name + "/objects/";
-      } else if (this.bucket.group != null) {
-        path = "/groups/" + this.bucket.group.uuid + "/buckets/" + this.bucket.name + "/objects/";
-      } else {
-        path = "/buckets/" + this.bucket.name + "/objects/";
-      }
-      path += this.uuid;
+      path = this._getPath();
       request = new KiiRequest(path, true);
       refreshCallbacks = {
         success: function(data, statusCode) {
@@ -1698,16 +1983,9 @@
       var path, refreshCallbacks, request,
         _this = this;
       _thisObject = this;
-      if (this.bucket.user != null) {
-        path = "/users/" + this.bucket.user.uuid + "/buckets/" + this.bucket.name + "/objects/";
-      } else if (this.bucket.group != null) {
-        path = "/groups/" + this.bucket.group.uuid + "/buckets/" + this.bucket.name + "/objects/";
-      } else {
-        path = "/buckets/" + this.bucket.name + "/objects/";
-      }
-      path += this.uuid;
+      path = this._getPath();
       request = new KiiRequest(path, true);
-      request.method = "DELETE";
+      request.setMethod("DELETE");
       refreshCallbacks = {
         success: function(data, statusCode) {
           if (statusCode < 300 && statusCode >= 200 && (callbacks != null)) {
@@ -1729,8 +2007,8 @@
       var obj;
       Kii.logger("Creating object w type: " + type);
       obj = new KiiObject;
-      obj.bucket = bucket;
-      obj.type = type;
+      obj._setBucket(bucket);
+      obj._setObjectType(type);
       Kii.logger(obj);
       return obj;
     };
@@ -1738,13 +2016,14 @@
     /** Generate a new KiiObject based on a given URI
     @param {String} uri The URI of the object to be represented
     @returns {KiiObject} A new KiiObject with its parameters filled in from the URI
+    @throws {InvalidURIException} If the URI is not in the proper format
     @example
     var group = new KiiObject.objectWithURI("kiicloud://myuri");
     */
 
 
     KiiObject.objectWithURI = function(uri) {
-      var bucket, bucketIndex, bucketName, compLength, components, group, newURI, obj, user;
+      var bucket, bucketIndex, bucketName, compLength, components, group, newURI, obj, subject, user;
       newURI = uri.substr("kiicloud://".length);
       components = newURI.split("/");
       compLength = components.length;
@@ -1757,13 +2036,19 @@
         } else if (components[0] === "users") {
           user = new KiiUser.userWithID(components[1]);
         }
-        bucket = new KiiBucket.bucketWithName(bucketName, (group != null ? group : user));
+        subject = null;
+        if (group != null) {
+          subject = group;
+        } else if (user != null) {
+          subject = user;
+        }
+        bucket = new KiiBucket.bucketWithName(bucketName, subject);
         Kii.logger(bucket);
         obj = bucket.createObject();
-        obj.uuid = components[compLength - 1];
+        obj._setUUID(components[compLength - 1]);
         Kii.logger(obj);
       } else {
-        Kii.error("Invalid URI: " + uri);
+        throw new InvalidURIException;
       }
       return obj;
     };
@@ -1779,34 +2064,87 @@
 
 
   root.KiiQuery = (function() {
-    var _clause, _cursor, _limit, _sortString;
+    var _clause, _cursor, _limit, _paginationKey, _sortDescending, _sortField, _sortString;
 
     function KiiQuery() {
-      this.setLimit = __bind(this.setLimit, this);
-
-      this.getLimit = __bind(this.getLimit, this);
-
-      this.dictValue = __bind(this.dictValue, this);
+      this._dictValue = __bind(this._dictValue, this);
 
       this.sortByAsc = __bind(this.sortByAsc, this);
 
       this.sortByDesc = __bind(this.sortByDesc, this);
 
-    }
+      this.setLimit = __bind(this.setLimit, this);
 
-    KiiQuery.prototype._className = "KiiQuery";
+      this.getLimit = __bind(this.getLimit, this);
+
+      this._setClause = __bind(this._setClause, this);
+
+      this.setPaginationKey = __bind(this.setPaginationKey, this);
+
+      this.getPaginationKey = __bind(this.getPaginationKey, this);
+
+    }
 
     _sortString = null;
 
     _cursor = null;
 
-    KiiQuery.prototype.sortDescending = false;
+    _paginationKey = null;
 
-    KiiQuery.prototype.sortField = null;
+    _sortDescending = false;
+
+    _sortField = null;
 
     _limit = 25;
 
     _clause = null;
+
+    KiiQuery.prototype.getPaginationKey = function() {
+      return this._paginationKey;
+    };
+
+    KiiQuery.prototype.setPaginationKey = function(_paginationKey) {
+      this._paginationKey = _paginationKey;
+    };
+
+    KiiQuery.prototype._setClause = function(_clause) {
+      this._clause = _clause;
+    };
+
+    /** Get the limit of the current query
+    @returns {Integer}
+    */
+
+
+    KiiQuery.prototype.getLimit = function() {
+      return this._limit;
+    };
+
+    /** Set the limit of the given query
+    @param value The desired limit. Must be an integer > 0
+    @throws InvalidLimitException
+    */
+
+
+    KiiQuery.prototype.setLimit = function(value) {
+      if (value > 0) {
+        return this._limit = value;
+      } else {
+        throw new InvalidLimitException;
+      }
+    };
+
+    /** Create a KiiQuery object based on a KiiClause
+    @param clause The KiiClause to be executed with the query
+    */
+
+
+    KiiQuery.queryWithClause = function(clause) {
+      var query;
+      query = new KiiQuery();
+      query._setClause(clause);
+      return query;
+    };
 
     /** Set the query to sort by a field in descending order
     
@@ -1815,9 +2153,9 @@
     */
 
 
-    KiiQuery.prototype.sortByDesc = function(sortField) {
-      this.sortField = sortField;
-      return this.sortDescending = true;
+    KiiQuery.prototype.sortByDesc = function(_sortField) {
+      this._sortField = _sortField;
+      return this._sortDescending = true;
     };
 
     /** Set the query to sort by a field in ascending order
@@ -1827,51 +2165,31 @@
     */
 
 
-    KiiQuery.prototype.sortByAsc = function(sortField) {
-      this.sortField = sortField;
-      return this.sortDescending = false;
+    KiiQuery.prototype.sortByAsc = function(_sortField) {
+      this._sortField = _sortField;
+      return this._sortDescending = false;
     };
 
-    KiiQuery.emptyDictValue = function() {
+    KiiQuery._emptyDictValue = function() {
       return {
         type: "all"
       };
     };
 
-    KiiQuery.prototype.dictValue = function() {
+    KiiQuery.prototype._dictValue = function() {
       var data;
       data = {
-        numberOfResults: _limit,
-        descending: this.sortDescending
+        descending: this._sortDescending
       };
       if (this._clause != null) {
-        data.clause = this._clause.getDictValue();
+        data.clause = this._clause._getDictValue();
       } else {
-        data.clause = KiiQuery.emptyDictValue();
+        data.clause = KiiQuery._emptyDictValue();
       }
-      if (this.sortField != null) {
-        data.orderBy = this.sortField;
+      if (this._sortField != null) {
+        data.orderBy = this._sortField;
       }
       return data;
-    };
-
-    KiiQuery.queryWithClause = function(clause) {
-      var query;
-      query = new KiiQuery();
-      query._clause = clause;
-      return query;
-    };
-
-    KiiQuery.prototype.getLimit = function() {
-      return this._limit;
-    };
-
-    KiiQuery.prototype.setLimit = function(value) {
-      if (value > 0) {
-        return this._limit = value;
-      } else {
-        return Kii.error("Unable to set a limit <= 0");
-      }
     };
 
     return KiiQuery;
@@ -1888,25 +2206,40 @@
     var _dictExpression, _whereClauses, _whereType;
 
     function KiiClause() {
-      this.getDictValue = __bind(this.getDictValue, this);
+      this._getDictValue = __bind(this._getDictValue, this);
 
-      this.setDictValue = __bind(this.setDictValue, this);
+      this._setDictValue = __bind(this._setDictValue, this);
+
+      this._setWhereClauses = __bind(this._setWhereClauses, this);
+
+      this._setWhereType = __bind(this._setWhereType, this);
 
     }
 
-    KiiClause.prototype._className = "KiiClause";
-
-    _dictExpression = {};
+    _dictExpression = null;
 
     _whereType = null;
 
-    _whereClauses = [];
+    _whereClauses = null;
 
-    KiiClause.prototype.setDictValue = function(_dictExpression) {
+    KiiClause.constructor = function() {
+      KiiClause._whereClauses = [];
+      return KiiClause._dictExpression = {};
+    };
+
+    KiiClause.prototype._setWhereType = function(_whereType) {
+      this._whereType = _whereType;
+    };
+
+    KiiClause.prototype._setWhereClauses = function(_whereClauses) {
+      this._whereClauses = _whereClauses;
+    };
+
+    KiiClause.prototype._setDictValue = function(_dictExpression) {
       this._dictExpression = _dictExpression;
     };
 
-    KiiClause.prototype.getDictValue = function() {
+    KiiClause.prototype._getDictValue = function() {
       var clause, clauses, retDict, _i, _len, _ref;
       retDict = {};
       if ((this._whereClauses != null) && (this._whereType != null)) {
@@ -1916,16 +2249,16 @@
           if (this._whereType === "not") {
             retDict = {
               "type": this._whereType,
-              "clause": clause.getDictValue()
+              "clause": clause._getDictValue()
             };
           } else {
-            retDict = clause.getDictValue();
+            retDict = clause._getDictValue();
           }
         } else {
           _ref = this._whereClauses;
           for (_i = 0, _len = _ref.length; _i < _len; _i++) {
             clause = _ref[_i];
-            clauses.push(clause.getDictValue());
+            clauses.push(clause._getDictValue());
           }
           retDict = {
             "type": this._whereType,
@@ -1934,7 +2267,7 @@
         }
       } else if (this._whereClauses != null) {
         if (this._whereClauses.length > 0) {
-          retDict = this._whereClauses[0].getDictValue();
+          retDict = this._whereClauses[0]._getDictValue();
         }
       } else if (this._dictExpression != null) {
         retDict = this._dictExpression;
@@ -1948,8 +2281,8 @@
     KiiClause.createWithWhere = function(whereType, whereClauses) {
       var expression;
       expression = new KiiClause();
-      expression._whereType = whereType;
-      expression._whereClauses = whereClauses;
+      expression._setWhereType(whereType);
+      expression._setWhereClauses(whereClauses);
       return expression;
     };
 
@@ -1990,7 +2323,7 @@
         _dict.field = key;
         _dict.prefix = value;
       }
-      expression.setDictValue(_dict);
+      expression._setDictValue(_dict);
       return expression;
     };
 
@@ -2111,53 +2444,169 @@
 
     _thisRequest = null;
 
+    KiiRequest._path = null;
+
+    KiiRequest._method = null;
+
+    KiiRequest._headers = null;
+
+    KiiRequest._data = null;
+
+    KiiRequest._contentType = null;
+
+    KiiRequest._anonymous = false;
+
+    KiiRequest._accept = null;
+
+    KiiRequest._success = null;
+
+    KiiRequest._failure = null;
+
+    KiiRequest.prototype.getPath = function() {
+      return this._path;
+    };
+
+    KiiRequest.prototype.setPath = function(_path) {
+      this._path = _path;
+    };
+
+    KiiRequest.prototype.getMethod = function() {
+      return this._method;
+    };
+
+    KiiRequest.prototype.setMethod = function(_method) {
+      this._method = _method;
+    };
+
+    KiiRequest.prototype.getHeaders = function() {
+      return this._headers;
+    };
+
+    KiiRequest.prototype.setHeaders = function(_headers) {
+      this._headers = _headers;
+    };
+
+    KiiRequest.prototype.getData = function() {
+      return this._data;
+    };
+
+    KiiRequest.prototype.setData = function(_data) {
+      this._data = _data;
+    };
+
+    KiiRequest.prototype.getContentType = function() {
+      return this._contentType;
+    };
+
+    KiiRequest.prototype.setContentType = function(_contentType) {
+      this._contentType = _contentType;
+    };
+
+    KiiRequest.prototype.isAnonymous = function() {
+      return this._anonymous;
+    };
+
+    KiiRequest.prototype.setAnonymous = function(_anonymous) {
+      this._anonymous = _anonymous;
+    };
+
+    KiiRequest.prototype.getAccept = function() {
+      return this._accept;
+    };
+
+    KiiRequest.prototype.setAccept = function(_accept) {
+      this._accept = _accept;
+    };
+
+    KiiRequest.prototype.addHeader = function(name, value) {
+      return this._headers[name] = value;
+    };
+
     function KiiRequest(path, withApp) {
       this.execute = __bind(this.execute, this);
 
+      this.addHeader = __bind(this.addHeader, this);
+
+      this.setAccept = __bind(this.setAccept, this);
+
+      this.getAccept = __bind(this.getAccept, this);
+
+      this.setAnonymous = __bind(this.setAnonymous, this);
+
+      this.isAnonymous = __bind(this.isAnonymous, this);
+
+      this.setContentType = __bind(this.setContentType, this);
+
+      this.getContentType = __bind(this.getContentType, this);
+
+      this.setData = __bind(this.setData, this);
+
+      this.getData = __bind(this.getData, this);
+
+      this.setHeaders = __bind(this.setHeaders, this);
+
+      this.getHeaders = __bind(this.getHeaders, this);
+
+      this.setMethod = __bind(this.setMethod, this);
+
+      this.getMethod = __bind(this.getMethod, this);
+
+      this.setPath = __bind(this.setPath, this);
+
+      this.getPath = __bind(this.getPath, this);
+
       var _this = this;
       _thisRequest = this;
-      this.path = withApp ? "/apps/" + (Kii.getAppID()) + path : path;
-      this.method = "GET";
-      this.headers = {
+      this._path = withApp ? "/apps/" + (Kii.getAppID()) + path : path;
+      this._method = "GET";
+      this._headers = {
         "user-agent": "js/1.0",
         "accept": "*/*"
       };
-      this.data = null;
-      this.contentType = "application/json";
-      this.anonymous = false;
-      this.accept = null;
-      this.success = function() {};
-      this.failure = function() {};
+      this._contentType = "application/json";
+      this._anonymous = false;
+      this._success = function() {};
+      this._failure = function() {};
     }
 
     KiiRequest.prototype.execute = function(callbacks, ignoreBody) {
-      var ajaxData, json_text, url,
+      var ajaxData, json_text, key, postData, url, val, _ref,
         _this = this;
-      this.success = callbacks.success != null ? callbacks.success : this.success;
-      this.failure = callbacks.failure != null ? callbacks.failure : this.failure;
-      url = Kii.getBaseURL() + this.path;
-      json_text = JSON.stringify(this.data);
-      Kii.logger("Making request[" + this.method + "] to " + url + " with data: " + json_text);
-      this.headers['x-kii-appid'] = Kii.getAppID();
-      this.headers['x-kii-appkey'] = Kii.getAppKey();
-      if (this.accept != null) {
-        this.headers['accept'] = this.accept;
+      this._success = callbacks.success != null ? callbacks.success : this._success;
+      this._failure = callbacks.failure != null ? callbacks.failure : this._failure;
+      url = Kii.getBaseURL() + this._path;
+      Kii.logger("POSTING: ");
+      Kii.logger(this._data);
+      if (this._data != null) {
+        postData = {};
       }
-      if (!this.anonymous) {
-        this.headers['Authorization'] = "Bearer " + (KiiUser.getCurrentUser().accessToken);
+      _ref = this._data;
+      for (key in _ref) {
+        val = _ref[key];
+        postData[key] = encodeURIComponent(val);
+      }
+      json_text = JSON.stringify(this._data);
+      Kii.logger("Making request[" + this._method + "] to " + url + " with data: " + json_text);
+      this._headers['x-kii-appid'] = Kii.getAppID();
+      this._headers['x-kii-appkey'] = Kii.getAppKey();
+      if (this._accept != null) {
+        this._headers['accept'] = this._accept;
+      }
+      if (!this._anonymous && (KiiUser.getCurrentUser() != null)) {
+        this._headers['Authorization'] = "Bearer " + (KiiUser.getCurrentUser().getAccessToken());
       }
       Kii.logger("Headers: ");
-      Kii.logger(this.headers);
+      Kii.logger(this._headers);
       ajaxData = {
-        type: this.method,
+        type: this._method,
         url: url,
         dataType: "json",
-        headers: this.headers,
-        contentType: this.contentType,
+        headers: this._headers,
+        contentType: this._contentType,
         error: function(xhr, status, error) {
           var errString, json;
           errString = error;
-          json = jQuery.parseJSON(xhr.responseText);
+          json = jQuery.parseJSON(decodeURIComponent(xhr.responseText));
           if (json != null) {
             if (json.errorCode != null) {
               errString = json.errorCode;
@@ -2168,7 +2617,7 @@
           }
           Kii.logger("Failure: " + errString);
           Kii.logger(xhr.responseText);
-          return _thisRequest.failure(errString, xhr.status);
+          return _thisRequest._failure(errString, xhr.status);
         },
         complete: function(xhr, status) {
           var errString, json;
@@ -2181,12 +2630,12 @@
               if (json.message != null) {
                 errString += ": " + json.message;
               }
-              return _thisRequest.failure(errString, xhr.status, json.errorCode);
+              return _thisRequest._failure(errString, xhr.status, json.errorCode);
             } else {
-              return _thisRequest.success(json, xhr.status);
+              return _thisRequest._success(json, xhr.status);
             }
           } else if (ignoreBody) {
-            return _thisRequest.success(null, xhr.status);
+            return _thisRequest._success(null, xhr.status);
           } else {
             return Kii.error("Unable to parse server response. HTTP Status: " + xhr.status + " HTTP Body: " + xhr.responseText);
           }
@@ -2211,8 +2660,35 @@
 
 
   root.KiiUser = (function() {
-    var _displayName, _email, _password, _phoneNumber, _thisUser, _username,
-      _this = this;
+    var _accessToken, _country, _created, _customInfo, _displayName, _emailAddress, _emailVerified, _modified, _password, _phoneNumber, _phoneVerified, _thisUser, _username, _uuid;
+
+    _thisUser = null;
+
+    _uuid = null;
+
+    _username = null;
+
+    _displayName = null;
+
+    _password = null;
+
+    _emailAddress = null;
+
+    _phoneNumber = null;
+
+    _country = null;
+
+    _created = null;
+
+    _modified = null;
+
+    _emailVerified = null;
+
+    _phoneVerified = null;
+
+    _accessToken = null;
+
+    _customInfo = null;
 
     function KiiUser() {
       this._updateWithJSON = __bind(this._updateWithJSON, this);
@@ -2237,8 +2713,6 @@
 
       this.verifyPhoneNumber = __bind(this.verifyPhoneNumber, this);
 
-      this.verifyEmailAddress = __bind(this.verifyEmailAddress, this);
-
       this.verifyCredentials = __bind(this.verifyCredentials, this);
 
       this.updatePassword = __bind(this.updatePassword, this);
@@ -2257,200 +2731,250 @@
 
       this.objectURI = __bind(this.objectURI, this);
 
+      this._setPassword = __bind(this._setPassword, this);
+
+      this._setAccessToken = __bind(this._setAccessToken, this);
+
+      this.getAccessToken = __bind(this.getAccessToken, this);
+
+      this._setPhoneVerified = __bind(this._setPhoneVerified, this);
+
+      this.getPhoneVerified = __bind(this.getPhoneVerified, this);
+
+      this._setEmailVerified = __bind(this._setEmailVerified, this);
+
+      this.getEmailVerified = __bind(this.getEmailVerified, this);
+
+      this._setModified = __bind(this._setModified, this);
+
+      this.getModified = __bind(this.getModified, this);
+
+      this._setCreated = __bind(this._setCreated, this);
+
+      this.getCreated = __bind(this.getCreated, this);
+
+      this.setCountry = __bind(this.setCountry, this);
+
+      this.getCountry = __bind(this.getCountry, this);
+
+      this._setPhoneNumber = __bind(this._setPhoneNumber, this);
+
+      this.getPhoneNumber = __bind(this.getPhoneNumber, this);
+
+      this._setEmailAddress = __bind(this._setEmailAddress, this);
+
+      this.getEmailAddress = __bind(this.getEmailAddress, this);
+
+      this.setDisplayName = __bind(this.setDisplayName, this);
+
+      this.getDisplayName = __bind(this.getDisplayName, this);
+
+      this._setUsername = __bind(this._setUsername, this);
+
+      this.getUsername = __bind(this.getUsername, this);
+
+      this._setUUID = __bind(this._setUUID, this);
+
+      this.getUUID = __bind(this.getUUID, this);
+      this._customInfo = {};
     }
 
-    _thisUser = null;
-
-    _username = null;
-
-    _displayName = null;
-
-    _password = null;
-
-    _email = null;
-
-    _phoneNumber = null;
-
-    KiiUser.prototype._className = "KiiUser";
-
-    KiiUser.prototype._customInfo = {};
-
-    /** The UUID of the given user, assigned by the server
-    @type String
+    /** Get the UUID of the given user, assigned by the server
+    @returns {String}
     */
 
 
-    KiiUser.prototype.uuid = null;
+    KiiUser.prototype.getUUID = function() {
+      return this._uuid;
+    };
 
-    /** The username to use for authentication or for display. Must be between 4-64 alphanumeric characters, must start with a letter.
-    @type String
-    @throws {InvalidUsernameException} If the username is not a valid format
+    KiiUser.prototype._setUUID = function(_uuid) {
+      this._uuid = _uuid;
+    };
+
+    /** Get the username of the given user 
+    @returns {String}
     */
 
 
-    KiiUser.prototype.__defineGetter__("username", function() {
-      return KiiUser._username;
-    });
+    KiiUser.prototype.getUsername = function() {
+      return this._username;
+    };
 
-    KiiUser.prototype.__defineSetter__("username", function(value) {
+    KiiUser.prototype._setUsername = function(value) {
       var pattern;
-      console.log("Setting username: " + value);
-      pattern = /[A-Za-z]{1}[A-Za-z0-9-_]{3,63}/i;
+      Kii.logger("Setting username: " + value);
+      pattern = /^[A-Za-z]{1}[A-Za-z0-9-_]{3,63}$/i;
       if ((typeof value).toLowerCase() !== "string") {
         throw new InvalidUsernameException;
       } else if (value.match(pattern)) {
-        return KiiUser._username = value;
+        Kii.logger("Matchedu");
+        return this._username = value;
       } else {
         throw new InvalidUsernameException;
       }
-    });
+    };
 
-    /** Display name for this user. Cannot be used for logging a user in; is non-unique. Must be between 4-50 alphanumeric characters, must start with a letter.
-    
-    @type String
+    /** Get the display name associated with this user
+    @returns {String}
+    */
+
+
+    KiiUser.prototype.getDisplayName = function() {
+      return this._displayName;
+    };
+
+    /** Set the display name associated with this user. Cannot be used for logging a user in; is non-unique
+    @param {String} value Must be between 4-50 alphanumeric characters, must start with a letter
     @throws {InvalidDisplayNameException} If the displayName is not a valid format
     */
 
 
-    KiiUser.prototype.__defineGetter__("displayName", function() {
-      Kii.logger("Getting Displayname: " + KiiUser._displayName);
-      return KiiUser._displayName;
-    });
-
-    KiiUser.prototype.__defineSetter__("displayName", function(value) {
+    KiiUser.prototype.setDisplayName = function(value) {
       var pattern;
-      Kii.logger("Setting displayName: " + value);
-      pattern = /[A-Za-z]{1}[A-Za-z0-9-_]{3,49}/i;
+      pattern = /^[A-Za-z0-9-_]{4,50}$/i;
       if ((typeof value).toLowerCase() !== "string") {
         throw new InvalidDisplayNameException;
       } else if (value.match(pattern)) {
-        Kii.logger("Set displayName: " + value);
-        return KiiUser._displayName = value;
+        return this._displayName = value;
       } else {
         throw new InvalidDisplayNameException;
-      }
-    });
-
-    /** The password of the given user. Must be at least 4 characters, made up of alphanumeric and/or: @,#,$,%,^,&
-    @type String
-    @throws {InvalidPasswordException} If the password is not a valid format
-    */
-
-
-    KiiUser.prototype.__defineGetter__("password", function() {
-      return KiiUser._password;
-    });
-
-    KiiUser.prototype.__defineSetter__("password", function(value) {
-      var pattern;
-      pattern = /[A-Za-z0-9\\@\\#\\$\\%\\^\\&]{4,}/i;
-      if ((typeof value).toLowerCase() !== "string") {
-        console.log("Not a string");
-        throw new InvalidPasswordException;
-      } else if (value.match(pattern)) {
-        console.log("Matched");
-        return KiiUser._password = value;
-      } else {
-        console.log("Wasn't Matched");
-        throw new InvalidPasswordException;
-      }
-    });
-
-    KiiUser._validateEmail = function(value) {
-      var pattern;
-      value = $.trim(value);
-      pattern = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,6}$/i;
-      if ((typeof value).toLowerCase() !== "string") {
-        Kii.logger("Not string");
-        return false;
-      } else if (value.match(pattern)) {
-        return true;
-      } else {
-        return false;
       }
     };
 
-    /** Email address to use for authentication or for display
-    @type String
-    @throws {InvalidEmailException} If the email address is not a valid format
+    /** Get the email address associated with this user
+    @returns {String}
     */
 
 
-    KiiUser.prototype.__defineGetter__("email", function() {
-      return KiiUser._email;
-    });
+    KiiUser.prototype.getEmailAddress = function() {
+      return this._emailAddress;
+    };
 
-    KiiUser.prototype.__defineSetter__("email", function(value) {
-      if (KiiUser._validateEmail(value)) {
-        return KiiUser._email = $.trim(value);
+    KiiUser.prototype._setEmailAddress = function(value) {
+      Kii.logger("Setting email: " + value);
+      if (KiiUtilities._validateEmail(value)) {
+        return this._emailAddress = $.trim(value);
       } else {
         throw new InvalidEmailException;
       }
-    });
+    };
 
-    /** Phone number to use for authentication or for display. Must begin with a '+' and be at least 10 digits.
-    @type String
-    @throws {InvalidPhoneException} If the phone number is not a valid format
+    /** Get the phone number associated with this user
+    @returns {String}
     */
 
 
-    KiiUser.prototype.__defineGetter__("phoneNumber", function() {
-      return KiiUser._phoneNumber;
-    });
+    KiiUser.prototype.getPhoneNumber = function() {
+      return this._phoneNumber;
+    };
 
-    KiiUser.prototype.__defineSetter__("phoneNumber", function(value) {
-      var pattern;
-      pattern = /[\\+]+[0-9]{10,}/i;
-      if ((typeof value).toLowerCase() !== "string") {
-        throw new InvalidPhoneNumberException;
-      } else if (value.match(pattern)) {
-        return KiiUser._phoneNumber = value;
+    KiiUser.prototype._setPhoneNumber = function(value) {
+      Kii.logger("Setting phone number: " + value);
+      if (KiiUtilities._validatePhoneNumber(value)) {
+        return this._phoneNumber = value;
       } else {
         throw new InvalidPhoneNumberException;
       }
-    });
+    };
 
-    /** The country code associated with this user
-    @type String
+    /** Get the country code associated with this user
+    @returns {String}
     */
 
 
-    KiiUser.prototype.country = null;
+    KiiUser.prototype.getCountry = function() {
+      return this._country;
+    };
 
-    /** The created date of the given user, assigned by the server 
-    @type Date
+    /** Set the country code associated with this user
+    @param {String} value The country code to set. Must be 2 alphabetic characters. Ex: US, JP, CN
+    @throws {InvalidCountryException} If the country code is not a valid format
     */
 
 
-    KiiUser.prototype.created = null;
+    KiiUser.prototype.setCountry = function(value) {
+      if (KiiUtilities._validateCountryCode(value)) {
+        return this._country = value;
+      } else {
+        throw new InvalidCountryException;
+      }
+    };
 
-    /** The modified date of the given user, assigned by the server 
-    @type Date
+    /** Get the server's creation date of this user
+    @returns {String}
     */
 
 
-    KiiUser.prototype.modified = null;
+    KiiUser.prototype.getCreated = function() {
+      return this._created;
+    };
 
-    /** true if the user's email address has been verified by the user, false otherwise. This field is assigned by the server
-    @type Boolean
+    KiiUser.prototype._setCreated = function(_created) {
+      this._created = _created;
+    };
+
+    /** Get the modified date of the given user, assigned by the server 
+    @returns {String}
     */
 
 
-    KiiUser.prototype.emailVerified = false;
+    KiiUser.prototype.getModified = function() {
+      return this._modified;
+    };
 
-    /** true if the user's phone number has been verified by the user, false otherwise. This field is assigned by the server
-    @type Boolean
+    KiiUser.prototype._setModified = function(_modified) {
+      this._modified = _modified;
+    };
+
+    /** Get the status of the user's email verification. This field is assigned by the server
+    @returns {Boolean} true if the user's email address has been verified by the user, false otherwise
     */
 
 
-    KiiUser.prototype.phoneVerified = false;
+    KiiUser.prototype.getEmailVerified = function() {
+      return this._emailVerified;
+    };
 
-    /** The access token for the user - only available if the user is currently logged in.
-    @type String
+    KiiUser.prototype._setEmailVerified = function(_emailVerified) {
+      this._emailVerified = _emailVerified;
+    };
+
+    /** Get the status of the user's phone number verification. This field is assigned by the server
+    @returns {Boolean} true if the user's email address has been verified by the user, false otherwise
     */
 
 
-    KiiUser.prototype.accessToken = null;
+    KiiUser.prototype.getPhoneVerified = function() {
+      return this._phoneVerified;
+    };
+
+    KiiUser.prototype._setPhoneVerified = function(_phoneVerified) {
+      this._phoneVerified = _phoneVerified;
+    };
+
+    /** Get the access token for the user - only available if the user is currently logged in
+    @returns {String}
+    */
+
+
+    KiiUser.prototype.getAccessToken = function() {
+      Kii.logger("Getting access token: " + this._accessToken);
+      return this._accessToken;
+    };
+
+    KiiUser.prototype._setAccessToken = function(_accessToken) {
+      this._accessToken = _accessToken;
+      return Kii.logger("Setting access token: " + this._accessToken);
+    };
+
+    KiiUser.prototype._setPassword = function(value) {
+      if (KiiUtilities._validatePassword(value)) {
+        return this._password = value;
+      } else {
+        throw new InvalidPasswordException;
+      }
+    };
 
     /** Get a specifically formatted string referencing the user
     
@@ -2464,8 +2988,8 @@
 
     KiiUser.prototype.objectURI = function() {
       var uri;
-      if (this.uuid != null) {
-        uri = "kiicloud://users/" + this.uuid;
+      if (this._uuid != null) {
+        uri = "kiicloud://users/" + this._uuid;
       }
       return uri;
     };
@@ -2517,8 +3041,10 @@
     
     <br><br>Creates an pre-filled user object for manipulation. This user will not be authenticated until one of the authentication methods are called on it. It can be treated as any other KiiObject before it is authenticated.
     @param username The user's desired username. Must be between 4-64 alphanumeric characters, must start with a letter.
-    @param password The user's password
+    @param password The user's password. Must be at least 4 characters, made up of alphanumeric and/or: @,#,$,%,^,&
     @returns a working KiiUser object
+    @throws {InvalidUsernameException} If the username is not in the proper format
+    @throws {InvalidPasswordException} If the password is not in the proper format
     @example 
     var user = KiiUser.userWithUsername("myusername", "mypassword");
     */
@@ -2527,49 +3053,91 @@
     KiiUser.userWithUsername = function(username, password) {
       var user;
       user = new KiiUser();
-      user.username = username;
-      user.password = password;
+      user._setUsername(username);
+      user._setPassword(password);
       return user;
     };
 
     /** Create a user object with credentials pre-filled
     
     <br><br>Creates an pre-filled user object for manipulation. This user will not be authenticated until one of the authentication methods are called on it. It can be treated as any other KiiCoreObject before it is authenticated. This method should only be used for authentication, as registration requires a username. This method can be used once the user's phone number has been verified.
-    @param phoneNumber The user's verified phone number
-    @param password The user's password
+    @param phoneNumber The user's phone number
+    @param username The user's desired username. Must be between 4-64 alphanumeric characters, must start with a letter.
+    @param password The user's password. Must be at least 4 characters, made up of alphanumeric and/or: @,#,$,%,^,&
+    @throws {InvalidUsernameException} If the username is not in the proper format
+    @throws {InvalidPasswordException} If the password is not in the proper format
+    @throws {InvalidPhoneNumberException} If the phone number is not in the proper format
     @returns a working KiiUser object
     @example 
-    var user = KiiUser.userWithPhoneNumber("15559847589", "mypassword");
+    var user = KiiUser.userWithPhoneNumber("15559847589", "johndoe", "mypassword");
     */
 
 
-    KiiUser.userWithPhoneNumber = function(phoneNumber, password) {
+    KiiUser.userWithPhoneNumber = function(phoneNumber, username, password) {
       var user;
       user = new KiiUser();
-      user.phoneNumber = phoneNumber;
-      user.password = password;
+      user._setPhoneNumber(phoneNumber);
+      user._setUsername(username);
+      user._setPassword(password);
       return user;
+    };
+
+    /** Create a user object with credentials pre-filled
+    
+    <br><br>Creates an pre-filled user object for manipulation. This user will not be authenticated until one of the authentication methods are called on it. It can be treated as any other KiiCoreObject before it is authenticated. This method should only be used for authentication, as registration requires a username. This method can be used once the user's phone number has been verified.
+    @param emailAddress The user's email address
+    @param username The user's desired username. Must be between 4-64 alphanumeric characters, must start with a letter.
+    @param password The user's password. Must be at least 4 characters, made up of alphanumeric and/or: @,#,$,%,^,&
+    @throws {InvalidUsernameException} If the username is not in the proper format
+    @throws {InvalidPasswordException} If the password is not in the proper format
+    @throws {InvalidEmailException} If the phone number is not in the proper format
+    @returns a working KiiUser object
+    @example 
+    var user = KiiUser.userWithEmailAddress("johndoe@example.com", "johndoe", "mypassword");
+    */
+
+
+    KiiUser.userWithEmailAddress = function(emailAddress, username, password) {
+      var user;
+      user = new KiiUser();
+      user._setEmailAddress(emailAddress);
+      user._setUsername(username);
+      user._setPassword(password);
+      return user;
+    };
+
+    KiiUser._validateURI = function(value) {
+      var match, pattern, retValue;
+      value = $.trim(value);
+      pattern = /^kiicloud:\/\/users\/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i;
+      if ((typeof value).toLowerCase() === "string") {
+        match = value.match(pattern);
+        if (match != null) {
+          retValue = match[1];
+        }
+      }
+      return retValue;
     };
 
     /** Generate a new KiiUser based on a given URI
     @param {String} uri The URI of the object to be represented 
     @returns {KiiUser} A new KiiUser with its parameters filled in from the URI
+    @throws {InvalidURIException} If the URI is not in the proper format
     @example
     var user = new KiiUser.userWithURI("kiicloud://myuri");
     */
 
 
     KiiUser.userWithURI = function(uri) {
-      var compLength, components, newURI, user;
-      newURI = uri.substr("kiicloud://".length);
-      components = newURI.split("/");
-      compLength = components.length;
-      if (compLength > 0) {
+      var user, uuid;
+      Kii.logger("About to extract from: " + uri);
+      uuid = KiiUser._validateURI(uri);
+      Kii.logger("Extracted uuid from uri: " + uuid);
+      if (uuid != null) {
         user = new KiiUser();
-        user.uuid = components[compLength - 1];
-        Kii.logger(user);
+        user._setUUID(uuid);
       } else {
-        Kii.error("Invalid URI: " + uri);
+        throw new InvalidURIException;
       }
       return user;
     };
@@ -2577,7 +3145,7 @@
     KiiUser.userWithID = function(id) {
       var user;
       user = new KiiUser();
-      user.uuid = id;
+      user._setUUID(id);
       return user;
     };
 
@@ -2603,16 +3171,16 @@
       Kii.logger("Authenticating user " + this);
       Kii.logger(callbacks);
       request = new KiiRequest("/oauth2/token", false);
-      request.anonymous = true;
-      request.method = "POST";
-      request.data = {
-        username: this.username,
-        password: this.password
-      };
+      request.setAnonymous(true);
+      request.setMethod("POST");
+      request.setData({
+        username: this._username,
+        password: this._password
+      });
       authCallbacks = {
         success: function(data) {
-          _thisUser.uuid = data.id;
-          _thisUser.accessToken = data.access_token;
+          _thisUser._setUUID(data.id);
+          _thisUser._setAccessToken(data.access_token);
           Kii.setCurrentUser(_thisUser);
           if (callbacks != null) {
             return callbacks.success(Kii.getCurrentUser());
@@ -2634,15 +3202,12 @@
       Kii.logger("Authenticating user " + this);
       Kii.logger(callbacks);
       request = new KiiRequest("/users/me", true);
-      request.anonymous = true;
-      request.method = "GET";
-      request.headers = {
-        Authorization: "Bearer " + token
-      };
+      request.setAnonymous(true);
+      request.addHeader("Authorization", "Bearer " + token);
       authCallbacks = {
         success: function(data) {
           _thisUser._updateWithJSON(data);
-          _thisUser.accessToken = token;
+          _thisUser._setAccessToken(token);
           Kii.setCurrentUser(_thisUser);
           if (callbacks != null) {
             return callbacks.success(Kii.getCurrentUser());
@@ -2658,16 +3223,13 @@
     };
 
     /** Authenticates a user with the server
-    
-    <br><br>The user object must have an associated email/password combination.
-    @param {String} userIdentifier Can be a username or a verified phone number or a verified email address
+    @param {String} username The username of the user to authenticate
     @param {String} password The password of the user to authenticate
     @param {Object} callbacks An object with callback methods defined
     @param {Method} callbacks.success The callback method to call on a successful authentication request
     @param {Method} callbacks.failure The callback method to call on a failed authentication request
-    @example 
-    var user = KiiUser.userWithUsername("myusername", "mypassword");
-    user.authenticate({
+    @example
+    KiiUser.authenticate("myusername", "mypassword", {
         success: function(theAuthedUser) {
             // do something with the authenticated user
         },
@@ -2679,9 +3241,9 @@
     */
 
 
-    KiiUser.authenticate = function(userIdentifier, password, callbacks) {
+    KiiUser.authenticate = function(username, password, callbacks) {
       var user;
-      user = KiiUser.userWithUsername(userIdentifier, password);
+      user = KiiUser.userWithUsername(username, password);
       return user._authenticate(callbacks);
     };
 
@@ -2737,21 +3299,21 @@
       _thisUser = this;
       Kii.logger("Registering user " + this);
       data = {
-        loginName: this.username,
-        displayName: this.username,
-        password: this.password
+        loginName: this._username,
+        displayName: this._username,
+        password: this._password
       };
-      if (this.displayName != null) {
-        data.displayName = this.displayName;
+      if (this._displayName != null) {
+        data.displayName = this._displayName;
       }
-      if (this.email != null) {
-        data.email = this.email;
+      if (this._emailAddress != null) {
+        data.emailAddress = this._emailAddress;
       }
-      if (this.phoneNumber != null) {
-        data.phoneNumber = this.phoneNumber;
+      if (this._phoneNumber != null) {
+        data.phoneNumber = this._phoneNumber;
       }
-      if (this.country != null) {
-        data.country = this.country;
+      if (this._country != null) {
+        data.country = this._country;
       }
       Kii.logger("CINFO");
       Kii.logger(this._customInfo);
@@ -2762,10 +3324,10 @@
         data[key] = value;
       }
       request = new KiiRequest("/users", true);
-      request.method = "POST";
-      request.data = data;
-      request.anonymous = true;
-      request.contentType = "application/vnd.kii.RegistrationRequest+json";
+      request.setMethod("POST");
+      request.setData(data);
+      request.setAnonymous(true);
+      request.setContentType("application/vnd.kii.RegistrationRequest+json");
       registrationCallbacks = {
         success: function(data) {
           return _thisUser._authenticate(callbacks);
@@ -2783,10 +3345,11 @@
     
     <br><br>Update a user's password with the server. The fromPassword must be equal to the current password associated with the account in order to succeed.
     @param {String} fromPassword The user's current password
-    @param {String} toPassword The user's desired password
+    @param {String} toPassword The user's desired password. Must be at least 4 characters, made up of alphanumeric and/or: @,#,$,%,^,&
     @param {Object} callbacks An object with callback methods defined
     @param {Method} callbacks.success The callback method to call on a successful update password request
     @param {Method} callbacks.failure The callback method to call on a failed update password request
+    @throws {InvalidPasswordException} If the new password is not in the proper format
     @example 
     var user = Kii.currentUser();
     user.updatePassword("oldpassword", "newpassword", {
@@ -2806,33 +3369,91 @@
         _this = this;
       _thisUser = this;
       Kii.logger("Updating password from " + fromPassword + " to " + toPassword);
-      data = {
-        oldPassword: fromPassword,
-        newPassword: toPassword
-      };
-      path = "/users/" + this.uuid + "/password";
-      request = new KiiRequest(path, true);
-      request.method = "PUT";
-      request.data = data;
-      request.contentType = "application/vnd.kii.ChangePasswordRequest+json";
-      updateCallbacks = {
-        success: function(data, statusCode) {
-          if (statusCode < 300 && statusCode >= 200) {
-            _thisUser.password = toPassword;
-            if (callbacks != null) {
-              return callbacks.success(_thisUser);
+      if (KiiUtilities._validatePassword(toPassword)) {
+        data = {
+          oldPassword: fromPassword,
+          newPassword: toPassword
+        };
+        path = "/users/" + this._uuid + "/password";
+        request = new KiiRequest(path, true);
+        request.setMethod("PUT");
+        request.setData(data);
+        request.setContentType("application/vnd.kii.ChangePasswordRequest+json");
+        updateCallbacks = {
+          success: function(data, statusCode) {
+            if (statusCode < 300 && statusCode >= 200) {
+              _thisUser._setPassword(toPassword);
+              if (callbacks != null) {
+                return callbacks.success(_thisUser);
+              }
+            } else if (callbacks != null) {
+              return callbacks.failure(_thisUser, "Unable to change password");
             }
-          } else if (callbacks != null) {
-            return callbacks.failure(_thisUser, "Unable to change password");
+          },
+          failure: function(error, statusCode) {
+            if (callbacks != null) {
+              return callbacks.failure(_thisUser, error);
+            }
           }
+        };
+        return request.execute(updateCallbacks, true);
+      } else if (callbacks != null) {
+        return callbacks.failure(_thisUser, (new InvalidPasswordException()).message);
+      }
+    };
+
+    /** Reset a user's password on the server
+    
+    <br><br>Reset a user's password on the server. The user is determined by the specified userIdentifier - which can be an email address or phone number that has already been associated with an account. Reset instructions will be sent to that identifier.
+    @param {String} userIdentifier The user's current password
+    @param {Object} callbacks An object with callback methods defined
+    @param {Method} callbacks.success The callback method to call on a successful update password request
+    @param {Method} callbacks.failure The callback method to call on a failed update password request
+    @example 
+    KiiUser.resetPassword("johndoe@example.com", {
+        success: function() {
+            // do something
         },
-        failure: function(error, statusCode) {
-          if (callbacks != null) {
-            return callbacks.failure(_thisUser, error);
-          }
+        
+        failure: function(anErrorString) {
+            // do something with the error response
         }
-      };
-      return request.execute(updateCallbacks, true);
+    });
+    */
+
+
+    KiiUser.resetPassword = function(userIdentifier, callbacks) {
+      var accountType, path, request, resetCallbacks;
+      Kii.logger("Resetting password with identifier: " + userIdentifier);
+      if (KiiUtilities._validateEmail(userIdentifier)) {
+        accountType = "EMAIL";
+      } else if (KiiUtilities._validatePhoneNumber(userIdentifier)) {
+        accountType = "PHONE";
+      } else if (callbacks != null) {
+        callbacks.failure("Invalid user identifier. Must be a valid email address or phone number");
+        return;
+      }
+      if (accountType != null) {
+        path = "/users/" + accountType + ":" + userIdentifier + "/password/request-reset";
+        request = new KiiRequest(path, true);
+        request.setMethod("POST");
+        request.setAnonymous(true);
+        resetCallbacks = {
+          success: function(data, statusCode) {
+            if (statusCode < 300 && statusCode >= 200 && (callbacks != null)) {
+              return callbacks.success();
+            } else if (callbacks != null) {
+              return callbacks.failure("Unable to reset password");
+            }
+          },
+          failure: function(error, statusCode) {
+            if (callbacks != null) {
+              return callbacks.failure(error);
+            }
+          }
+        };
+        return request.execute(resetCallbacks, true);
+      }
     };
 
     KiiUser.prototype.verifyCredentials = function(type, code, callbacks) {
@@ -2842,18 +3463,18 @@
       Kii.logger("Verifying " + type + " with code: " + code);
       path = "/users/me/" + type + "/verify";
       request = new KiiRequest(path, true);
-      request.method = "POST";
-      request.data = {
+      request.setMethod("POST");
+      request.setData({
         verificationCode: code
-      };
-      request.contentType = "application/vnd.kii.AddressVerificationRequest+json";
+      });
+      request.setContentType("application/vnd.kii.AddressVerificationRequest+json");
       verifyCallbacks = {
         success: function(data, statusCode) {
           if (statusCode < 300 && statusCode >= 200) {
             if (type === "email-address") {
-              _thisUser.emailVerified = true;
+              _thisUser._setEmailVerified(true);
             } else if (type === "phone-number") {
-              _thisUser.phoneVerified = true;
+              _thisUser._setPhoneVerified(true);
             }
             if (callbacks != null) {
               return callbacks.success(_thisUser);
@@ -2869,31 +3490,6 @@
         }
       };
       return request.execute(verifyCallbacks, true);
-    };
-
-    /** Verify the current user's email address
-    
-    <br><br>This method is used to verify the email address of the currently logged in user.
-    @param {String} verificationCode The code which verifies the currently logged in user
-    @param {Object} callbacks An object with callback methods defined
-    @param {Method} callbacks.success The callback method to call on a successful verification request
-    @param {Method} callbacks.failure The callback method to call on a failed verification request
-    @example 
-    var user = Kii.currentUser();
-    user.verifyEmailAddress("012345", {
-        success: function(theUser) {
-            // do something
-        },
-        
-        failure: function(theUser, anErrorString) {
-            // do something with the error response
-        }
-    });
-    */
-
-
-    KiiUser.prototype.verifyEmailAddress = function(verificationCode, callbacks) {
-      return this.verifyCredentials("email-address", verificationCode, callbacks);
     };
 
     /** Verify the current user's phone number
@@ -2928,7 +3524,7 @@
       Kii.logger("Resending verification " + type);
       path = "/users/me/" + type + "/resend-verification";
       request = new KiiRequest(path, true);
-      request.method = "POST";
+      request.setMethod("POST");
       resendCallbacks = {
         success: function(data, statusCode) {
           if (statusCode < 300 && statusCode >= 200 && (callbacks != null)) {
@@ -3019,10 +3615,10 @@
       var memberCallbacks, path, request,
         _this = this;
       _thisUser = this;
-      Kii.logger("Getting groups for member " + this.uuid);
-      path = "/groups/?is_member=" + this.uuid;
+      Kii.logger("Getting groups for member " + this._uuid);
+      path = "/groups/?is_member=" + this._uuid;
       request = new KiiRequest(path, true);
-      request.accept = "application/vnd.kii.GroupsRetrievalResponse+json";
+      request.setAccept("application/vnd.kii.GroupsRetrievalResponse+json");
       memberCallbacks = {
         success: function(data, statusCode) {
           var group, groupList, _i, _len, _ref;
@@ -3072,19 +3668,19 @@
       var path, request, updateCallbacks,
         _this = this;
       _thisUser = this;
-      Kii.logger("Updating phone number to " + this.phoneNumber);
-      path = "/users/" + this.uuid + "/phone-number";
+      Kii.logger("Updating phone number to " + newPhoneNumber);
+      path = "/users/" + this._uuid + "/phone-number";
       request = new KiiRequest(path, true);
-      request.method = "PUT";
-      request.contentType = "application/vnd.kii.PhoneNumberModificationRequest+json";
-      request.data = {
+      request.setMethod("PUT");
+      request.setContentType("application/vnd.kii.PhoneNumberModificationRequest+json");
+      request.setData({
         phoneNumber: newPhoneNumber
-      };
+      });
       updateCallbacks = {
         success: function(data, statusCode) {
           if (statusCode < 300 && statusCode >= 200 && (callbacks != null)) {
-            _thisUser.phoneVerified = false;
-            _thisUser.phoneNumber = newPhoneNumber;
+            _thisUser._setPhoneVerified(false);
+            _thisUser._setPhoneNumber(newPhoneNumber);
             return callbacks.success(_thisUser);
           } else if (callbacks != null) {
             return callbacks.failure(_thisUser, "Unable to update phone number");
@@ -3123,19 +3719,19 @@
         _this = this;
       _thisUser = this;
       Kii.logger("Updating email address to: " + newEmail);
-      if (KiiUser._validateEmail(newEmail)) {
-        path = "/users/" + this.uuid + "/email-address";
+      if (KiiUtilities._validateEmail(newEmail)) {
+        path = "/users/" + this._uuid + "/email-address";
         request = new KiiRequest(path, true);
-        request.method = "PUT";
-        request.contentType = "application/vnd.kii.EmailAddressModificationRequest+json";
-        request.data = {
+        request.setMethod("PUT");
+        request.setContentType("application/vnd.kii.EmailAddressModificationRequest+json");
+        request.setData({
           emailAddress: newEmail
-        };
+        });
         updateCallbacks = {
           success: function(data, statusCode) {
             if (statusCode < 300 && statusCode >= 200 && (callbacks != null)) {
-              _thisUser.emailVerified = false;
-              _thisUser.email = newEmail;
+              _thisUser._setEmailVerified(false);
+              _thisUser._setEmailAddress(newEmail);
               return callbacks.success(_thisUser);
             } else if (callbacks != null) {
               return callbacks.failure(_thisUser, "Unable to update email address");
@@ -3174,25 +3770,28 @@
 
 
     KiiUser.prototype.save = function(callbacks) {
-      var path, request, updateCallbacks,
+      var data, path, request, updateCallbacks,
         _this = this;
       _thisUser = this;
-      Kii.logger("Saving user: " + this.uuid);
-      path = "/users/" + _thisUser.uuid;
+      Kii.logger("Saving user: " + this._uuid);
+      path = "/users/" + this._uuid;
+      Kii.logger("CUSTOMINFO: ");
+      Kii.logger(this._customInfo);
       request = new KiiRequest(path, true);
-      request.method = "POST";
-      request.contentType = "application/vnd.kii.UserUpdateRequest+json";
-      request.data = _thisUser._customInfo;
-      if (_thisUser.country != null) {
-        request.data.country = _thisUser.country;
+      request.setMethod("POST");
+      request.setContentType("application/vnd.kii.UserUpdateRequest+json");
+      data = this._customInfo;
+      if (this._country != null) {
+        data.country = this._country;
       }
-      if (_thisUser.displayName != null) {
-        request.data.displayName = _thisUser.displayName;
+      if (this._displayName != null) {
+        data.displayName = this._displayName;
       }
+      request.setData(data);
       updateCallbacks = {
         success: function(data, statusCode) {
           if (statusCode < 300 && statusCode >= 200) {
-            _thisUser.modified = data.modifiedAt;
+            _thisUser._setModified(data.modifiedAt);
             if (callbacks != null) {
               return callbacks.success(_thisUser);
             }
@@ -3233,8 +3832,8 @@
       var refreshCallbacks, request,
         _this = this;
       _thisUser = this;
-      Kii.logger("Refreshing user: " + this.uuid);
-      request = new KiiRequest("/users/" + this.uuid, true);
+      Kii.logger("Refreshing user: " + this._uuid);
+      request = new KiiRequest("/users/" + this._uuid, true);
       refreshCallbacks = {
         success: function(data, statusCode) {
           if (statusCode < 300 && statusCode >= 200) {
@@ -3277,8 +3876,8 @@
       var refreshCallbacks, request,
         _this = this;
       _thisUser = this;
-      request = new KiiRequest("/users/" + this.uuid, true);
-      request.method = "DELETE";
+      request = new KiiRequest("/users/" + this._uuid, true);
+      request.setMethod("DELETE");
       refreshCallbacks = {
         success: function(data, statusCode) {
           if (statusCode < 300 && statusCode >= 200 && (callbacks != null)) {
@@ -3339,31 +3938,35 @@
         value = json[key];
         Kii.logger("key/val => " + key + "/" + value);
         if (key === "userID" || key === "id") {
-          this.uuid = value;
+          this._uuid = value;
         } else if (key === "created" || key === "createdAt" || key === "_created") {
-          this.created = value;
+          this._created = value;
         } else if (key === "modified" || key === "modifiedAt" || key === "_modified") {
-          this.modified = value;
+          this._modified = value;
         } else if (key === "loginName") {
-          this.username = value;
+          this._username = value;
         } else if (key === "displayName") {
-          this.displayName = value;
+          this._displayName = value;
         } else if (key === "country") {
-          this.country = value;
+          Kii.logger("Is setting country");
+          this._country = value;
         } else if (key === "emailAddress") {
-          this.emailAddress = value;
+          this._emailAddress = value;
         } else if (key === "phoneNumber") {
-          this.phoneNumber = value;
+          this._phoneNumber = value;
         } else if (key === "emailAddressVerified") {
-          this.emailAddressVerified = value;
+          this._emailAddressVerified = value;
         } else if (key === "phoneNumberVerified") {
-          this.phoneNumberVerified = value;
+          this._phoneNumberVerified = value;
         } else if (key.substring(0, 1 === !"_")) {
+          Kii.logger("Setting to custom info");
           this._customInfo[key] = value;
+        } else {
+          Kii.logger("Doing nothing");
         }
       }
-      if (!(this.displayName != null)) {
-        return this.displayName = this.username;
+      if (!(this._displayName != null) && (this._username != null)) {
+        return this._displayName = this._username;
       }
     };
 
@@ -3375,11 +3978,79 @@
 
     function KiiUtilities() {}
 
+    KiiUtilities.getObjectClass = function(obj) {
+      var arr;
+      if (obj && obj.constructor && obj.constructor.toString) {
+        arr = obj.constructor.toString().match(/function\s*(\w+)/);
+        if (arr && arr.length === 2) {
+          return arr[1];
+        }
+      }
+      return void 0;
+    };
+
     KiiUtilities.arrayRemove = function(array, from, to) {
       var rest;
       rest = array.slice(((to || from) + 1) || array.length);
       array.length = from < 0 ? array.length + from : from;
       return array.push.apply(array, rest);
+    };
+
+    KiiUtilities._validateEmail = function(value) {
+      var pattern;
+      value = $.trim(value);
+      pattern = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,6}$/i;
+      if ((typeof value).toLowerCase() !== "string") {
+        Kii.logger("Not string");
+        return false;
+      } else if (value.match(pattern)) {
+        return true;
+      } else {
+        return false;
+      }
+    };
+
+    KiiUtilities._validatePhoneNumber = function(value) {
+      var pattern;
+      value = $.trim(value);
+      pattern = /^[\\+]+[0-9]{10,}$/i;
+      if ((typeof value).toLowerCase() !== "string") {
+        Kii.logger("Not string");
+        return false;
+      } else if (value.match(pattern)) {
+        return true;
+      } else {
+        return false;
+      }
+    };
+
+    KiiUtilities._validateCountryCode = function(value) {
+      var pattern;
+      value = $.trim(value);
+      pattern = /^[a-z]{2}$/i;
+      console.log("Matched: " + (value.match(pattern)));
+      console.log("Length: " + value.length);
+      if ((typeof value).toLowerCase() !== "string") {
+        Kii.logger("Not string");
+        return false;
+      } else if (value.match(pattern)) {
+        Kii.logger("Is true");
+        return true;
+      } else {
+        return false;
+      }
+    };
+
+    KiiUtilities._validatePassword = function(value) {
+      var pattern;
+      pattern = /^[A-Za-z0-9\\@\\#\\$\\%\\^\\&]{4,}$/i;
+      if ((typeof value).toLowerCase() !== "string") {
+        return false;
+      } else if (value.match(pattern)) {
+        return true;
+      } else {
+        return false;
+      }
     };
 
     return KiiUtilities;
@@ -3415,9 +4086,9 @@
       if (_instance == null) {
         _instance = new _KiiSocialConnect;
       }
-      manager = _instance.getManager(networkName);
-      manager.reset();
-      manager.setup(apiKey, apiSecret, extras);
+      manager = _instance._getManager(networkName);
+      manager._reset();
+      manager._setup(apiKey, apiSecret, extras);
       return Kii.logger("Set key: " + manager._key);
     };
 
@@ -3425,6 +4096,7 @@
      
      This will initiate the login process for the given network. If a KiiUser has already been authenticated, this will authenticate and link the user to the network. Otherwise, this will generate a KiiUser that is automatically linked to the social network. The network must already be set up via setupNetwork
      @param networkName One of the supported KiiSocialNetworkName values
+     @param options A dictionary of key/values to pass to KiiSocialConnect
      @param {Object} callbacks An object with callback methods defined
      @param {Method} callbacks.success The callback method to call on a successful log in request
      @param {Method} callbacks.failure The callback method to call on a failed log in request
@@ -3443,14 +4115,15 @@
     */
 
 
-    KiiSocialConnect.logIn = function(networkName, callbacks) {
-      return _instance.getManager(networkName).logIn(callbacks);
+    KiiSocialConnect.logIn = function(networkName, options, callbacks) {
+      return _instance._getManager(networkName)._logIn(options, callbacks);
     };
 
     /** Link the currently logged in user with a social network
      
      This will initiate the login process for the given network, which for SSO-enabled services like Facebook, will send the user to the Facebook site for authentication. There must be a currently authenticated KiiUser. Otherwise, you can use the logIn: method to create and log in a KiiUser using a network. The network must already be set up via setupNetwork
      @param networkName One of the supported KiiSocialNetworkName values
+     @param options A dictionary of key/values to pass to KiiSocialConnect
      @param {Object} callbacks An object with callback methods defined
      @param {Method} callbacks.success The callback method to call on a successful log in request
      @param {Method} callbacks.failure The callback method to call on a failed log in request
@@ -3469,11 +4142,11 @@
     */
 
 
-    KiiSocialConnect.linkCurrentUserWithNetwork = function(networkName, callbacks) {
+    KiiSocialConnect.linkCurrentUserWithNetwork = function(networkName, options, callbacks) {
       Kii.logger("Trying with manager");
-      Kii.logger(_instance.getManager(networkName));
+      Kii.logger(_instance._getManager(networkName));
       Kii.logger("And key: " + (_instance.getManager(networkName)._key));
-      return _instance.getManager(networkName).linkWithCurrentUser(callbacks);
+      return _instance._getManager(networkName)._linkWithCurrentUser(options, callbacks);
     };
 
     /** Unlink the currently logged in user with a social network
@@ -3499,7 +4172,31 @@
 
 
     KiiSocialConnect.unLinkCurrentUserFromNetwork = function(networkName, callbacks) {
-      return _instance.getManager(networkName).unLinkCurrentUserFromNetwork(callbacks);
+      return _instance._getManager(networkName)._unlinkFromCurrentUser(callbacks);
+    };
+
+    /** Retrieve the current user's access token from a social network
+    
+    The network must be set up and linked to the current user. It is recommended you save this to preferences for multi-session use.
+    @param networkName One of the supported KiiSocialNetworkName values
+    @returns {String} The current access token, null if unavailable
+    */
+
+
+    KiiSocialConnect.getAccessTokenForNetwork = function(networkName) {
+      return _instance._getManager(networkName)._getToken();
+    };
+
+    /** Retrieve the current user's access token expiration date from a social network
+    
+    The network must be set up and linked to the current user. It is recommended you save this to preferences for multi-session use.
+    @param networkName One of the supported KiiSocialNetworkName values
+    @returns {String} The current access token expiration date, null if unavailable
+    */
+
+
+    KiiSocialConnect.getAccessTokenExpirationForNetwork = function(networkName) {
+      return _instance._getManager(networkName)._getTokenExpiration();
     };
 
     return KiiSocialConnect;
@@ -3507,22 +4204,21 @@
   }).call(this);
 
   _KiiSocialConnect = (function() {
+    var _facebookManager;
 
     function _KiiSocialConnect() {
-      this.getManager = __bind(this.getManager, this);
+      this._getManager = __bind(this._getManager, this);
 
     }
 
-    _KiiSocialConnect.prototype._className = "KiiSocialConnect";
+    _facebookManager = null;
 
-    _KiiSocialConnect.prototype._facebookManager = null;
-
-    _KiiSocialConnect.prototype.getManager = function(networkName) {
+    _KiiSocialConnect.prototype._getManager = function(networkName) {
       if (networkName === KiiSocialNetworkName.FACEBOOK) {
-        if (!(this._facebookManager != null)) {
-          return this._facebookManager = new KiiSCNFacebook();
-        } else {
+        if (this._facebookManager != null) {
           return this._facebookManager;
+        } else {
+          return this._facebookManager = new KiiSCNFacebook();
         }
       }
     };
@@ -3532,65 +4228,153 @@
   })();
 
   root.KiiSocialConnectNetwork = (function() {
+    var _callbacks, _extras, _key, _network, _secret, _token, _tokenExpiration;
 
     KiiSocialConnectNetwork.prototype._className = "KiiSocialConnectNetwork";
 
-    KiiSocialConnectNetwork.prototype._network = null;
+    _network = null;
 
-    KiiSocialConnectNetwork.prototype._key = null;
+    _key = null;
 
-    KiiSocialConnectNetwork.prototype._secret = null;
+    _secret = null;
 
-    KiiSocialConnectNetwork.prototype._extras = null;
+    _extras = null;
 
-    KiiSocialConnectNetwork.prototype._token = null;
+    _token = null;
 
-    KiiSocialConnectNetwork.prototype._callbacks = null;
+    _tokenExpiration = null;
+
+    _callbacks = null;
+
+    KiiSocialConnectNetwork.prototype._setNetwork = function(_network) {
+      this._network = _network;
+    };
+
+    KiiSocialConnectNetwork.prototype._getNetwork = function() {
+      return this._network;
+    };
+
+    KiiSocialConnectNetwork.prototype._setKey = function(_key) {
+      this._key = _key;
+    };
+
+    KiiSocialConnectNetwork.prototype._getKey = function() {
+      return this._key;
+    };
+
+    KiiSocialConnectNetwork.prototype._setSecret = function(_secret) {
+      this._secret = _secret;
+    };
+
+    KiiSocialConnectNetwork.prototype._getSecret = function() {
+      return this._secret;
+    };
+
+    KiiSocialConnectNetwork.prototype._setExtras = function(_extras) {
+      this._extras = _extras;
+    };
+
+    KiiSocialConnectNetwork.prototype._getExtras = function() {
+      return this._extras;
+    };
+
+    KiiSocialConnectNetwork.prototype._setToken = function(_token) {
+      this._token = _token;
+    };
+
+    KiiSocialConnectNetwork.prototype._getToken = function() {
+      return this._token;
+    };
+
+    KiiSocialConnectNetwork.prototype._setTokenExpiration = function(_tokenExpiration) {
+      this._tokenExpiration = _tokenExpiration;
+    };
+
+    KiiSocialConnectNetwork.prototype._getTokenExpiration = function() {
+      return this._tokenExpiration;
+    };
+
+    KiiSocialConnectNetwork.prototype._setCallbacks = function(_callbacks) {
+      this._callbacks = _callbacks;
+    };
+
+    KiiSocialConnectNetwork.prototype._getCallbacks = function() {
+      return this._callbacks;
+    };
 
     function KiiSocialConnectNetwork(_network) {
       this._network = _network;
-      this.setup = __bind(this.setup, this);
+      this._setup = __bind(this._setup, this);
 
-      this.unlinkFromCurrentUser = __bind(this.unlinkFromCurrentUser, this);
+      this._unlinkFromCurrentUser = __bind(this._unlinkFromCurrentUser, this);
 
-      this.linkWithCurrentUser = __bind(this.linkWithCurrentUser, this);
+      this._linkWithCurrentUser = __bind(this._linkWithCurrentUser, this);
 
-      this.logOut = __bind(this.logOut, this);
+      this._logOut = __bind(this._logOut, this);
 
-      this.logIn = __bind(this.logIn, this);
+      this._logIn = __bind(this._logIn, this);
 
-      this.reset = __bind(this.reset, this);
+      this._reset = __bind(this._reset, this);
 
-      this.isAuthenticated = __bind(this.isAuthenticated, this);
+      this._isAuthenticated = __bind(this._isAuthenticated, this);
+
+      this._getCallbacks = __bind(this._getCallbacks, this);
+
+      this._setCallbacks = __bind(this._setCallbacks, this);
+
+      this._getTokenExpiration = __bind(this._getTokenExpiration, this);
+
+      this._setTokenExpiration = __bind(this._setTokenExpiration, this);
+
+      this._getToken = __bind(this._getToken, this);
+
+      this._setToken = __bind(this._setToken, this);
+
+      this._getExtras = __bind(this._getExtras, this);
+
+      this._setExtras = __bind(this._setExtras, this);
+
+      this._getSecret = __bind(this._getSecret, this);
+
+      this._setSecret = __bind(this._setSecret, this);
+
+      this._getKey = __bind(this._getKey, this);
+
+      this._setKey = __bind(this._setKey, this);
+
+      this._getNetwork = __bind(this._getNetwork, this);
+
+      this._setNetwork = __bind(this._setNetwork, this);
 
     }
 
-    KiiSocialConnectNetwork.prototype.isAuthenticated = function() {
+    KiiSocialConnectNetwork.prototype._isAuthenticated = function() {
       return this._token != null;
     };
 
-    KiiSocialConnectNetwork.prototype.reset = function() {
+    KiiSocialConnectNetwork.prototype._reset = function() {
       this._token = null;
+      this._tokenExpiration = null;
       this._key = null;
       this._secret = null;
       return this._extras = null;
     };
 
-    KiiSocialConnectNetwork.prototype.logIn = function(_callbacks) {
+    KiiSocialConnectNetwork.prototype._logIn = function(options, _callbacks) {
       this._callbacks = _callbacks;
     };
 
-    KiiSocialConnectNetwork.prototype.logOut = function() {};
+    KiiSocialConnectNetwork.prototype._logOut = function() {};
 
-    KiiSocialConnectNetwork.prototype.linkWithCurrentUser = function(_callbacks) {
+    KiiSocialConnectNetwork.prototype._linkWithCurrentUser = function(options, _callbacks) {
       this._callbacks = _callbacks;
     };
 
-    KiiSocialConnectNetwork.prototype.unlinkFromCurrentUser = function(_callbacks) {
+    KiiSocialConnectNetwork.prototype._unlinkFromCurrentUser = function(_callbacks) {
       this._callbacks = _callbacks;
     };
 
-    KiiSocialConnectNetwork.prototype.setup = function(_key, _secret, _extras) {
+    KiiSocialConnectNetwork.prototype._setup = function(_key, _secret, _extras) {
       this._key = _key;
       this._secret = _secret;
       this._extras = _extras;
@@ -3601,96 +4385,106 @@
   })();
 
   root.KiiSCNFacebook = (function(_super) {
+    var _authWindow;
 
     __extends(KiiSCNFacebook, _super);
 
-    KiiSCNFacebook.prototype._className = "KiiSocialConnectNetwork";
-
-    KiiSCNFacebook.prototype._authWindow = null;
+    _authWindow = null;
 
     function KiiSCNFacebook() {
-      this.unlinkFromCurrentUser = __bind(this.unlinkFromCurrentUser, this);
+      this._unlinkFromCurrentUser = __bind(this._unlinkFromCurrentUser, this);
 
-      this.linkWithCurrentUser = __bind(this.linkWithCurrentUser, this);
+      this._linkWithCurrentUser = __bind(this._linkWithCurrentUser, this);
 
-      this.logOut = __bind(this.logOut, this);
+      this._logOut = __bind(this._logOut, this);
 
-      this.logIn = __bind(this.logIn, this);
+      this._logIn = __bind(this._logIn, this);
 
-      this.unlink = __bind(this.unlink, this);
+      this._unlink = __bind(this._unlink, this);
 
-      this.link = __bind(this.link, this);
+      this._link = __bind(this._link, this);
 
-      this.register = __bind(this.register, this);
+      this._register = __bind(this._register, this);
 
-      this.setup = __bind(this.setup, this);
+      this._setup = __bind(this._setup, this);
       KiiSCNFacebook.__super__.constructor.call(this, KiiSocialNetworkName.FACEBOOK);
     }
 
-    KiiSCNFacebook.prototype.setup = function(_key, _secret, _extras) {
+    KiiSCNFacebook.prototype._setup = function(_key, _secret, _extras) {
       this._key = _key;
       this._secret = _secret;
       this._extras = _extras;
-      KiiSCNFacebook.__super__.setup.call(this, this._key, this._secret, this._extras);
+      KiiSCNFacebook.__super__._setup.call(this, this._key, this._secret, this._extras);
       this._extras.appId = this._key;
       Kii.logger(this._extras);
       return FB.init(this._extras);
     };
 
-    KiiSCNFacebook.prototype.register = function(token, expires) {
+    KiiSCNFacebook.prototype._register = function(token, expires) {
       var registrationCallbacks, request,
         _this = this;
       _this = this;
       request = new KiiRequest("/integration/facebook", true);
-      request.method = "POST";
-      request.data = {
+      request.setMethod("POST");
+      request.setData({
         accessToken: token
-      };
-      request.anonymous = true;
-      request.contentType = "application/vnd.kii.AuthTokenFacebookRequest+json";
+      });
+      request.setAnonymous(true);
+      request.setContentType("application/vnd.kii.AuthTokenFacebookRequest+json");
       registrationCallbacks = {
         success: function(data) {
           var user;
+          _this._setToken(token);
+          _this._setTokenExpiration(expires);
           user = new KiiUser();
           user._updateWithJSON(data);
-          Kii.setAccessToken(data['access_token']);
-          Kii.setAccessTokenExpires(data['expires_in']);
+          user._setAccessToken(data['access_token']);
           Kii.setCurrentUser(user);
-          return _this._callbacks.success(KiiUser.getCurrentUser(), _this._network);
+          if (_this._callbacks != null) {
+            return _this._callbacks.success(KiiUser.getCurrentUser(), _this._network);
+          }
         },
         failure: function(error, statusCode) {
-          return _this._callbacks.failure(null, _this._network(error));
+          if (_this._callbacks != null) {
+            return _this._callbacks.failure(null, _this._network, error);
+          }
         }
       };
       return request.execute(registrationCallbacks, false);
     };
 
-    KiiSCNFacebook.prototype.link = function(token, expires) {
+    KiiSCNFacebook.prototype._link = function(token, expires) {
       var linkCallbacks, request,
         _this = this;
       _this = this;
       request = new KiiRequest("/users/me/facebook/link", true);
-      request.method = "POST";
-      request.data = {
+      request.setMethod("POST");
+      request.setData({
         accessToken: token
-      };
+      });
       linkCallbacks = {
         success: function(data) {
-          return _this._callbacks.success(KiiUser.getCurrentUser(), _this._network);
+          _this._setToken(token);
+          _this._setTokenExpiration(expires);
+          if (_this._callbacks != null) {
+            return _this._callbacks.success(KiiUser.getCurrentUser(), _this._network);
+          }
         },
         failure: function(error, statusCode) {
-          return _this._callbacks.failure(KiiUser.getCurrentUser(), _this._network, error);
+          if (_this._callbacks != null) {
+            return _this._callbacks.failure(KiiUser.getCurrentUser(), _this._network, error);
+          }
         }
       };
       return request.execute(linkCallbacks, true);
     };
 
-    KiiSCNFacebook.prototype.unlink = function() {
+    KiiSCNFacebook.prototype._unlink = function() {
       var request, unlinkCallbacks,
         _this = this;
       _this = this;
       request = new KiiRequest("/users/me/facebook/unlink", true);
-      request.method = "POST";
+      request.setMethod("POST");
       unlinkCallbacks = {
         success: function(data) {
           return _this._callbacks.success(KiiUser.getCurrentUser(), _this._network);
@@ -3702,50 +4496,68 @@
       return request.execute(unlinkCallbacks, true);
     };
 
-    KiiSCNFacebook.prototype.logIn = function(callbacks) {
+    KiiSCNFacebook.prototype._logIn = function(options, callbacks) {
       var _this = this;
-      KiiSCNFacebook.__super__.logIn.call(this, callbacks);
+      KiiSCNFacebook.__super__._logIn.call(this, options, callbacks);
       Kii.logger("should auth fb");
       _this = this;
-      return FB.login(function(response) {
-        if (response.authResponse) {
-          if (KiiUser.getCurrentUser() != null) {
-            return _this.register(response.authResponse.accessToken, response.authResponse.expiresIn);
-          } else {
-            return _this.link(response.authResponse.accessToken, response.authResponse.expiresIn);
-          }
+      Kii.logger("Checking options");
+      Kii.logger(options);
+      if ((options != null) && (options.access_token != null) && (options.access_token_expires != null)) {
+        Kii.logger("Have options: ");
+        Kii.logger(options);
+        if (KiiUser.getCurrentUser() != null) {
+          return _this._link(options.access_token, options.access_token_expires);
         } else {
-          return _this._callbacks.failure(null, _this._network, "User cancelled login or did not fully authorize");
+          return _this._register(options.access_token, options.access_token_expires);
         }
-      });
+      } else {
+        return FB.login(function(response) {
+          if (response.authResponse != null) {
+            if (KiiUser.getCurrentUser() != null) {
+              return _this._link(response.authResponse.accessToken, response.authResponse.expiresIn);
+            } else {
+              return _this._register(response.authResponse.accessToken, response.authResponse.expiresIn);
+            }
+          } else {
+            if (_this._callbacks != null) {
+              return _this._callbacks.failure(null, _this._network, "User cancelled login or did not fully authorize");
+            }
+          }
+        });
+      }
     };
 
-    KiiSCNFacebook.prototype.logOut = function() {
-      KiiSCNFacebook.__super__.logOut.apply(this, arguments);
+    KiiSCNFacebook.prototype._logOut = function() {
+      KiiSCNFacebook.__super__._logOut.apply(this, arguments);
       return Kii.logger("Log out fb");
     };
 
-    KiiSCNFacebook.prototype.linkWithCurrentUser = function(callbacks) {
+    KiiSCNFacebook.prototype._linkWithCurrentUser = function(options, callbacks) {
       var _this = this;
-      KiiSCNFacebook.__super__.linkWithCurrentUser.call(this, callbacks);
+      KiiSCNFacebook.__super__._linkWithCurrentUser.call(this, options, callbacks);
       _this = this;
       if (KiiUser.getCurrentUser() != null) {
-        return FB.login(function(response) {
-          if (response.authResponse) {
-            return _this.link(response.authResponse.accessToken, response.authResponse.expiresIn);
-          } else {
-            return _this._callbacks.failure(null, _this._network, "User cancelled Facebook login or did not fully authorize");
-          }
-        });
+        if ((options.access_token != null) && (options.access_token_expires != null)) {
+          return _this._link(options.access_token, options.access_token_expires);
+        } else {
+          return FB.login(function(response) {
+            if (response.authResponse) {
+              return _this._link(response.authResponse.accessToken, response.authResponse.expiresIn);
+            } else {
+              return _this._callbacks.failure(null, _this._network, "User cancelled Facebook login or did not fully authorize");
+            }
+          });
+        }
       } else {
         return callbacks.failure("A KiiUser must be logged in before linking to Facebook");
       }
     };
 
-    KiiSCNFacebook.prototype.unlinkFromCurrentUser = function(callbacks) {
-      KiiSCNFacebook.__super__.unlinkFromCurrentUser.call(this, callbacks);
+    KiiSCNFacebook.prototype._unlinkFromCurrentUser = function(callbacks) {
+      KiiSCNFacebook.__super__._unlinkFromCurrentUser.call(this, callbacks);
       if (KiiUser.getCurrentUser() != null) {
-        return _this.unlink();
+        return this._unlink();
       } else {
         return callbacks.failure("A KiiUser must be logged in before unlinking from Facebook");
       }
@@ -3774,5 +4586,71 @@
   root.InvalidPhoneNumberException = function() {
     return this.message = "Unable to set phone number. Must begin with a '+' and be at least 10 digits";
   };
+
+  root.InvalidCountryException = function() {
+    return _this.message = "Unable to set country code. Must be 2 alphabetic characters. Ex: US, JP, CN";
+  };
+
+  root.InvalidURIException = function() {
+    return _this.message = "Unable to set URI. Must be of the form kiicloud://some/path/to/object/or/entity";
+  };
+
+  root.InvalidACLAction = function() {
+    return _this.message = "Unable to set ACL action. Must be one of the permitted values in KiiACLAction";
+  };
+
+  root.InvalidACLSubject = function() {
+    return _this.message = "Unable to set ACL subject. Must be of type KiiUser or KiiGroup";
+  };
+
+  root.InvalidACLGrant = function() {
+    return _this.message = "Unable to set ACL grant. Must be a boolean type";
+  };
+
+  root.InvalidLimitException = function() {
+    return _this.message = "Unable to set query limit. Must be an integer > 0";
+  };
+
+  /**
+  	@class Represent any authenticated user for setting the ACL of an object. This will include anyone using the application who has registered and authenticated in the current session.
+  
+  	When retrieving ACL from an object, test for this class to determine the subject type. Example:
+  
+  		if(acl.subject typeof KiiAnyAuthenticatedUser) {
+          	// the ACL is set for any authenticated users
+      	}
+  
+      @exports root.KiiAnyAuthenticatedUser as KiiAnyAuthenticatedUser
+  */
+
+
+  root.KiiAnyAuthenticatedUser = (function() {
+
+    function KiiAnyAuthenticatedUser() {}
+
+    return KiiAnyAuthenticatedUser;
+
+  })();
+
+  /**
+  	@class Represent an anonymous user for setting the ACL of an object. This will include anyone using the application but have not signed up or authenticated as registered user.
+  
+  	When retrieving ACL from an object, test for this class to determine the subject type. Example:
+  
+  		if(acl.subject typeof KiiAnonymousUser) {
+          	// the ACL is set for anonymous users
+      	}
+  
+      @exports root.KiiAnonymousUser as KiiAnonymousUser
+  */
+
+
+  root.KiiAnonymousUser = (function() {
+
+    function KiiAnonymousUser() {}
+
+    return KiiAnonymousUser;
+
+  })();
 
 }).call(this);
