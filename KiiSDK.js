@@ -13,8 +13,8 @@
   };
 
   root.KiiSite = {
-    US: "http://api.kii.com/api",
-    JP: "http://api-jp.kii.com/api"
+    US: "https://api.kii.com/api",
+    JP: "https://api-jp.kii.com/api"
   };
 
   /**
