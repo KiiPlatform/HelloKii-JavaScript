@@ -12,17 +12,6 @@
         <script type="text/javascript" src="KiiSDK.js"></script>
         
         <script type="text/javascript">
-        
-            function randomString(length) {
-                
-                var text = "";
-                var possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-                
-                for( var i=0; i < length; i++ )
-                    text += possible.charAt(Math.floor(Math.random() * possible.length));
-                
-                return text;
-            }
 
             // the user clicked the 'sign up' button
             function performRegistration() {
@@ -115,16 +104,11 @@
             	// 
             	//
                 // initialize the Kii SDK!
-                Kii.initialize("__KII_APP_ID__", "__KII_APP_KEY__");
-                Kii.setLogging(true);
-                Kii.setBaseURL("__KII_API_URL__");
+                Kii.initializeWithSite("__KII_APP_ID__", "__KII_APP_key__", __KII_APP_SITE__);
             
                 // bind clicks to our login/sign up methods
                 $("#register-button").click(performRegistration);
                 $("#login-button").click(performLogin);
-                
-                $("#username").val(randomString(10));
-                $("#password").val(randomString(10));
 
             });
             

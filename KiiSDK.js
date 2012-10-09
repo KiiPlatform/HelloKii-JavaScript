@@ -12,6 +12,11 @@
     FACEBOOK: 1
   };
 
+  root.KiiSite = {
+    US: "http://api.kii.com/api",
+    JP: "http://api-jp.kii.com/api"
+  };
+
   /**
       @class The main SDK class
       @exports root.Kii as Kii
@@ -53,17 +58,6 @@
 
     Kii.getBaseURL = function() {
       return _instance._baseURL;
-    };
-
-    /**
-        Set a custom API endpoint URL
-        @param String url A string containing the desired endpoint
-    */
-
-
-    Kii.setBaseURL = function(url) {
-      Kii.logger("Setting base URL: " + url);
-      return _instance._baseURL = url;
     };
 
     /**
@@ -111,6 +105,24 @@
       return _instance._logging = logging;
     };
 
+    /** Initialize the Kii SDK with a specific URL
+    
+    Should be the first Kii SDK action your application makes
+    @param String appID The application ID found in your Kii developer console
+    @param String appKey The application key found in your Kii developer console
+    @param KiiSite site Can be one of the constants KiiSite.US or KiiSite.JP, depending on your location
+    @example
+    Kii.initializeWithSite("my-app-id", "my-app-key", KiiSite.JP);
+    */
+
+
+    Kii.initializeWithSite = function(appID, appKey, site) {
+      if (_instance == null) {
+        _instance = new _Kii(appID, appKey, site);
+      }
+      return Kii.logger("Initialized " + appID + ", " + appKey + ", " + site);
+    };
+
     /** Initialize the Kii SDK
     
     Should be the first Kii SDK action your application makes
@@ -122,10 +134,7 @@
 
 
     Kii.initialize = function(appID, appKey) {
-      if (_instance == null) {
-        _instance = new _Kii(appID, appKey);
-      }
-      return Kii.logger("Kii SDK initialized: [" + appID + ", " + appKey + "]");
+      return Kii.initializeWithSite(appID, appKey, KiiSite.US);
     };
 
     Kii.error = function(message) {
@@ -216,13 +225,19 @@
 
     _Kii.prototype._logging = true;
 
-    _Kii.prototype._baseURL = "http://api.kii.com/v/1.0";
+    _Kii.prototype._baseURL = null;
 
     _Kii.prototype._currentUser = null;
 
-    function _Kii(appID, appKey) {
+    function _Kii(appID, appKey, site) {
+      if (site === KiiSite.JP) {
+        site = KiiSite.JP;
+      } else {
+        site = KiiSite.US;
+      }
       this._appKey = appKey;
       this._appID = appID;
+      this._baseURL = site;
     }
 
     return _Kii;
@@ -249,13 +264,13 @@
 
       this._saveWithIndex = __bind(this._saveWithIndex, this);
 
+      this._saveSingle = __bind(this._saveSingle, this);
+
       this.removeACLEntry = __bind(this.removeACLEntry, this);
 
       this.putACLEntry = __bind(this.putACLEntry, this);
 
       this.listACLEntries = __bind(this.listACLEntries, this);
-
-      this._saveSingle = __bind(this._saveSingle, this);
 
       this.aclPath = __bind(this.aclPath, this);
 
@@ -304,31 +319,10 @@
       return path;
     };
 
-    KiiACL.prototype._saveSingle = function(aclEntry, callback) {
-      var path, request, saveCallbacks,
-        _this = this;
-      path = "" + (this.aclPath()) + "/" + (aclEntry.getActionString()) + "/" + (aclEntry.getEntityString());
-      request = new KiiRequest(path, true);
-      request.setMethod(aclEntry.getGrant() === true ? "PUT" : "DELETE");
-      saveCallbacks = {
-        success: function(data, statusCode) {
-          if (statusCode < 300 && statusCode >= 200) {
-            return callback();
-          } else {
-            return callback();
-          }
-        },
-        failure: function(error, statusCode, errorCode) {
-          return callback();
-        }
-      };
-      return request.execute(saveCallbacks, true);
-    };
-
     /** Get the list of active ACLs associated with this object from the server
-    @param Object callbacks An object with callback methods defined
-    @param Method callbacks.success The callback method to call on a successful list request
-    @param Method callbacks.failure The callback method to call on a failed list request
+    @param {Object} callbacks An object with callback methods defined
+    @param {Method} callbacks.success The callback method to call on a successful list request
+    @param {Method} callbacks.failure The callback method to call on a failed list request
     @example
     var acl = . . .; // a KiiACL object
     acl.listACLEntries({
@@ -389,8 +383,8 @@
       return request.execute(listCallbacks, false);
     };
 
-    /** Add a KiiACLEntry to the local object, if not already present
-    @param KiiACLEntry entry The KiiACLEntry to add
+    /** Add a KiiACLEntry to the local object, if not already present. This does not explicitly grant any permissions, which should be done through the KiiACLEntry itself. This method simply adds the entry to the local ACL object so it can be saved to the server.
+    @param {KiiACLEntry} entry The KiiACLEntry to add
     @example
     var aclEntry = . . .; // a KiiACLEntry object
     var acl = . . .; // a KiiACL object
@@ -404,8 +398,8 @@
       }
     };
 
-    /** Remove a KiiACLEntry to the local object
-    @param KiiACLEntry entry The KiiACLEntry to remove
+    /** Remove a KiiACLEntry to the local object. This does not explicitly revoke any permissions, which should be done through the KiiACLEntry itself. This method simply removes the entry from the local ACL object and will not be saved to the server.
+    @param {KiiACLEntry} entry The KiiACLEntry to remove
     @example 
     var aclEntry = . . .; // a KiiACLEntry object
     var acl = . . .; // a KiiACL object
@@ -421,24 +415,41 @@
       }
     };
 
+    KiiACL.prototype._saveSingle = function(aclEntry, callbacks) {
+      var path, request;
+      path = "" + (this.aclPath()) + "/" + (aclEntry.getActionString()) + "/" + (aclEntry.getEntityString());
+      Kii.logger("Saving single @path: " + path);
+      request = new KiiRequest(path, true);
+      request.setMethod(aclEntry.getGrant() === true ? "PUT" : "DELETE");
+      return request.execute(callbacks, true);
+    };
+
     KiiACL.prototype._saveWithIndex = function(callbacks, index) {
       var entry,
         _this = this;
       _thisACL = this;
       entry = this._entries[index];
+      Kii.logger("" + entry);
       if (entry != null) {
-        this._saveSingle(entry, function() {
-          return _thisACL._saveWithIndex(callbacks, index + 1);
+        return this._saveSingle(entry, {
+          success: function() {
+            Kii.logger("Did succeed");
+            return _thisACL._saveWithIndex(callbacks, index + 1);
+          },
+          failure: function() {
+            Kii.logger("Did fail");
+            return callbacks.failure();
+          }
         });
-        return;
+      } else {
+        return callbacks.success(this);
       }
-      return callbacks.success(this);
     };
 
     /** Save the list of ACLEntry objects associated with this ACL object to the server
-    @param Object callbacks An object with callback methods defined
-    @param Method callbacks.success The callback method to call on a successful save request
-    @param Method callbacks.failure The callback method to call on a failed save request
+    @param {Object} callbacks An object with callback methods defined
+    @param {Method} callbacks.success The callback method to call on a successful save request
+    @param {Method} callbacks.failure The callback method to call on a failed save request
     @example
     var obj = . . .; // a KiiObject
     obj.save({
@@ -454,6 +465,7 @@
 
 
     KiiACL.prototype.save = function(callbacks) {
+      Kii.logger("SAving acl");
       return this._saveWithIndex(callbacks, 0);
     };
 
@@ -885,6 +897,7 @@
     KiiBucket.prototype["delete"] = function(callbacks) {
       var executeCallbacks, request,
         _this = this;
+      console.log("Trying to delete...");
       _thisBucket = this;
       request = new KiiRequest(this._generatePath(), true);
       request.setMethod("DELETE");
@@ -920,10 +933,11 @@
 
     KiiBucket.prototype._generatePath = function() {
       var path;
+      console.log("Generating path " + this._group + " and " + this._user);
       if (this._user != null) {
         path = "/users/" + (this._user.getUUID()) + "/buckets/" + this._bucketName;
       } else if (this._group != null) {
-        path = "/users/" + (this._group.getUUID()) + "/buckets/" + this._bucketName;
+        path = "/groups/" + (this._group.getUUID()) + "/buckets/" + this._bucketName;
       } else {
         path = "/buckets/" + this._bucketName;
       }
@@ -1662,6 +1676,7 @@
     };
 
     KiiObject.prototype.getBucket = function() {
+      Kii.logger("GEtting bucket " + this._bucket);
       return this._bucket;
     };
 
@@ -2619,7 +2634,7 @@
           Kii.logger(xhr.responseText);
           return _thisRequest._failure(errString, xhr.status);
         },
-        complete: function(xhr, status) {
+        success: function(data, status, xhr) {
           var errString, json;
           Kii.logger("Completed Request[" + xhr.status + "]");
           Kii.logger(xhr.responseText);
@@ -2637,7 +2652,7 @@
           } else if (ignoreBody) {
             return _thisRequest._success(null, xhr.status);
           } else {
-            return Kii.error("Unable to parse server response. HTTP Status: " + xhr.status + " HTTP Body: " + xhr.responseText);
+            return _thisRequest._failure("Unable to parse server response. HTTP Status: " + xhr.status, xhr.status, "PARSE_ERROR");
           }
         }
       };
@@ -3330,9 +3345,11 @@
       request.setContentType("application/vnd.kii.RegistrationRequest+json");
       registrationCallbacks = {
         success: function(data) {
+          Kii.logger("Succreg");
           return _thisUser._authenticate(callbacks);
         },
         failure: function(error, statusCode) {
+          Kii.logger("Failreg");
           if (callbacks != null) {
             return callbacks.failure(_thisUser, error);
           }
@@ -3875,6 +3892,7 @@
     KiiUser.prototype["delete"] = function(callbacks) {
       var refreshCallbacks, request,
         _this = this;
+      Kii.logger("Deleting user...");
       _thisUser = this;
       request = new KiiRequest("/users/" + this._uuid, true);
       request.setMethod("DELETE");
@@ -3937,6 +3955,7 @@
       for (key in json) {
         value = json[key];
         Kii.logger("key/val => " + key + "/" + value);
+        Kii.logger("Substr " + (key.substring(0, 1)));
         if (key === "userID" || key === "id") {
           this._uuid = value;
         } else if (key === "created" || key === "createdAt" || key === "_created") {
@@ -3958,7 +3977,10 @@
           this._emailAddressVerified = value;
         } else if (key === "phoneNumberVerified") {
           this._phoneNumberVerified = value;
-        } else if (key.substring(0, 1 === !"_")) {
+        } else if (key === "") {
+          Kii.logger("Setting empty to custom info");
+          this._customInfo[key] = value;
+        } else if (key.substring(0, 1 !== "_")) {
           Kii.logger("Setting to custom info");
           this._customInfo[key] = value;
         } else {
@@ -4116,7 +4138,21 @@
 
 
     KiiSocialConnect.logIn = function(networkName, options, callbacks) {
-      return _instance._getManager(networkName)._logIn(options, callbacks);
+      var called;
+      called = false;
+      if (_instance != null) {
+        Kii.logger("And manager: ");
+        Kii.logger(_instance._getManager(networkName));
+        if (_instance._getManager(networkName)) {
+          _instance._getManager(networkName)._logIn(options, callbacks);
+          called = true;
+        }
+      }
+      Kii.logger("Callbacks");
+      Kii.logger(callbacks);
+      if (!called && (callbacks != null)) {
+        return callbacks.failure(KiiUser.getCurrentUser(), networkName, "Unable to get network. Please ensure the network name is one of the supported KiiSocialNetworkName values");
+      }
     };
 
     /** Link the currently logged in user with a social network
@@ -4143,10 +4179,23 @@
 
 
     KiiSocialConnect.linkCurrentUserWithNetwork = function(networkName, options, callbacks) {
-      Kii.logger("Trying with manager");
-      Kii.logger(_instance._getManager(networkName));
-      Kii.logger("And key: " + (_instance.getManager(networkName)._key));
-      return _instance._getManager(networkName)._linkWithCurrentUser(options, callbacks);
+      var called;
+      Kii.logger("Trying with instance");
+      Kii.logger(_instance);
+      called = false;
+      if (_instance != null) {
+        Kii.logger("And manager: ");
+        Kii.logger(_instance._getManager(networkName));
+        if (_instance._getManager(networkName)) {
+          _instance._getManager(networkName)._linkWithCurrentUser(options, callbacks);
+          called = true;
+        }
+      }
+      Kii.logger("Callbacks");
+      Kii.logger(callbacks);
+      if (!called && (callbacks != null)) {
+        return callbacks.failure(KiiUser.getCurrentUser(), networkName, "Unable to get network. Please ensure the network name is one of the supported KiiSocialNetworkName values");
+      }
     };
 
     /** Unlink the currently logged in user with a social network
@@ -4172,7 +4221,23 @@
 
 
     KiiSocialConnect.unLinkCurrentUserFromNetwork = function(networkName, callbacks) {
-      return _instance._getManager(networkName)._unlinkFromCurrentUser(callbacks);
+      var called;
+      Kii.logger("Trying with instance");
+      Kii.logger(_instance);
+      called = false;
+      if (_instance != null) {
+        Kii.logger("And manager: ");
+        Kii.logger(_instance._getManager(networkName));
+        if (_instance._getManager(networkName)) {
+          _instance._getManager(networkName)._unlinkFromCurrentUser(callbacks);
+          called = true;
+        }
+      }
+      Kii.logger("Callbacks");
+      Kii.logger(callbacks);
+      if (!called && (callbacks != null)) {
+        return callbacks.failure(KiiUser.getCurrentUser(), networkName, "Unable to get network. Please ensure the network name is one of the supported KiiSocialNetworkName values");
+      }
     };
 
     /** Retrieve the current user's access token from a social network
@@ -4487,10 +4552,14 @@
       request.setMethod("POST");
       unlinkCallbacks = {
         success: function(data) {
-          return _this._callbacks.success(KiiUser.getCurrentUser(), _this._network);
+          if (_this._callbacks != null) {
+            return _this._callbacks.success(KiiUser.getCurrentUser(), _this._network);
+          }
         },
         failure: function(error, statusCode) {
-          return _this._callbacks.failure(KiiUser.getCurrentUser(), _this._network, error);
+          if (_this._callbacks != null) {
+            return _this._callbacks.failure(KiiUser.getCurrentUser(), _this._network, error);
+          }
         }
       };
       return request.execute(unlinkCallbacks, true);
@@ -4538,18 +4607,18 @@
       KiiSCNFacebook.__super__._linkWithCurrentUser.call(this, options, callbacks);
       _this = this;
       if (KiiUser.getCurrentUser() != null) {
-        if ((options.access_token != null) && (options.access_token_expires != null)) {
+        if ((options != null) && (options.access_token != null) && (options.access_token_expires != null)) {
           return _this._link(options.access_token, options.access_token_expires);
         } else {
           return FB.login(function(response) {
             if (response.authResponse) {
               return _this._link(response.authResponse.accessToken, response.authResponse.expiresIn);
-            } else {
+            } else if (_this._callbacks != null) {
               return _this._callbacks.failure(null, _this._network, "User cancelled Facebook login or did not fully authorize");
             }
           });
         }
-      } else {
+      } else if (callbacks != null) {
         return callbacks.failure("A KiiUser must be logged in before linking to Facebook");
       }
     };
@@ -4558,7 +4627,7 @@
       KiiSCNFacebook.__super__._unlinkFromCurrentUser.call(this, callbacks);
       if (KiiUser.getCurrentUser() != null) {
         return this._unlink();
-      } else {
+      } else if (callbacks != null) {
         return callbacks.failure("A KiiUser must be logged in before unlinking from Facebook");
       }
     };
