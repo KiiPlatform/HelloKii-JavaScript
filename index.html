@@ -24,37 +24,50 @@
                 var password = $("#password").val();
                 
                 // create the user
-                var user = KiiUser.userWithUsername(username, password);
-                
-                // perform the asynchronous registration, with callbacks defined
-                user.register({
-                
-                    // callback for successful registration
-                    success: function(theAuthedUser) {
-                    
-                        // show the list of objects
-                        $.mobile.changePage("list.html");
-                        
-                        // hide the loading animation
-                        $.mobile.hidePageLoadingMsg();	
-                        
-                        // tell the console
-                        Kii.logger("User registered: " + user);
-                    },
-                    
-                    // callback for failed registration
-                    failure: function(theUser, anErrorString) {
+                try {
+                    var user = KiiUser.userWithUsername(username, password);
 
-                        // hide the loading animation
-                        $.mobile.hidePageLoadingMsg();	
+                    // perform the asynchronous registration, with callbacks defined
+                    user.register({
+                    
+                        // callback for successful registration
+                        success: function(theAuthedUser) {
                         
-                        // tell the user
-                        alert("Unable to register: " + anErrorString);
+                            // show the list of objects
+                            $.mobile.changePage("list.html");
+                            
+                            // hide the loading animation
+                            $.mobile.hidePageLoadingMsg();  
+                            
+                            // tell the console
+                            Kii.logger("User registered: " + user);
+                        },
                         
-                        // tell the console
-                        Kii.logger("Unable to register user: " + anErrorString);
-                    }
-                });
+                        // callback for failed registration
+                        failure: function(theUser, anErrorString) {
+
+                            // hide the loading animation
+                            $.mobile.hidePageLoadingMsg();  
+                            
+                            // tell the user
+                            alert("Unable to register: " + anErrorString);
+                            
+                            // tell the console
+                            Kii.logger("Unable to register user: " + anErrorString);
+                        }
+                    });
+
+                } catch(e) {
+
+                    // hide the loading animation
+                    $.mobile.hidePageLoadingMsg();  
+                    
+                    // tell the user
+                    alert("Unable to register: " + e.message);
+                    
+                    // tell the console
+                    Kii.logger("Unable to register user: " + e.message);
+                }
 
             }
         
@@ -104,7 +117,7 @@
             	// 
             	//
                 // initialize the Kii SDK!
-                Kii.initializeWithSite("__KII_APP_ID__", "__KII_APP_key__", __KII_APP_SITE__);
+                Kii.initializeWithSite("__KII_APP_ID__", "__KII_APP_key__", "");
             
                 // bind clicks to our login/sign up methods
                 $("#register-button").click(performRegistration);
