@@ -80,25 +80,9 @@
       return _instance._appKey;
     };
 
-    /**
-        Is the SDK printing logs to the console?
-        @returns {Boolean} True if printing logs, false otherwise
-    */
-
-
     Kii.isLogging = function() {
       return _instance._logging;
     };
-
-    /**
-        Set the logging status of the SDK
-        
-        Helpful for development - we strongly advice you turn off logging for any production code.
-        @param Boolean True if logs should be printed, false otherwise
-        @example
-        Kii.setLogging(true);
-    */
-
 
     Kii.setLogging = function(logging) {
       Kii.logger("Setting logging: " + logging);
@@ -140,16 +124,6 @@
     Kii.error = function(message) {
       return console.log("KiiSDK Error => " + message);
     };
-
-    /** 
-        Utilize the Kii logger to track SDK-specific actions
-        
-        Helpful for development - we strongly advice you turn off logging for any production code.
-        @param String message The message to print to console.log in your browser
-        @example
-        Kii.logger("My message");
-    */
-
 
     Kii.logger = function(message) {
       if (_instance._logging) {
@@ -223,7 +197,7 @@
 
   _Kii = (function() {
 
-    _Kii.prototype._logging = true;
+    _Kii.prototype._logging = false;
 
     _Kii.prototype._baseURL = null;
 
@@ -232,6 +206,8 @@
     function _Kii(appID, appKey, site) {
       if (site === KiiSite.JP) {
         site = KiiSite.JP;
+      } else if (site === KiiSite.DEV) {
+        site = KiiSite.DEV;
       } else {
         site = KiiSite.US;
       }
@@ -897,7 +873,6 @@
     KiiBucket.prototype["delete"] = function(callbacks) {
       var executeCallbacks, request,
         _this = this;
-      console.log("Trying to delete...");
       _thisBucket = this;
       request = new KiiRequest(this._generatePath(), true);
       request.setMethod("DELETE");
@@ -933,7 +908,6 @@
 
     KiiBucket.prototype._generatePath = function() {
       var path;
-      console.log("Generating path " + this._group + " and " + this._user);
       if (this._user != null) {
         path = "/users/" + (this._user.getUUID()) + "/buckets/" + this._bucketName;
       } else if (this._group != null) {
@@ -2575,7 +2549,6 @@
       this._path = withApp ? "/apps/" + (Kii.getAppID()) + path : path;
       this._method = "GET";
       this._headers = {
-        "user-agent": "js/1.0",
         "accept": "*/*"
       };
       this._contentType = "application/json";
@@ -2612,6 +2585,7 @@
       }
       Kii.logger("Headers: ");
       Kii.logger(this._headers);
+      $.support.cors = true;
       ajaxData = {
         type: this._method,
         url: url,
@@ -2657,7 +2631,6 @@
         }
       };
       if (this.method !== "GET" && (json_text != null)) {
-        ajaxData.headers['content-length'] = json_text.length;
         ajaxData.data = json_text;
         ajaxData.processData = false;
       }
@@ -2746,8 +2719,6 @@
 
       this.objectURI = __bind(this.objectURI, this);
 
-      this._setPassword = __bind(this._setPassword, this);
-
       this._setAccessToken = __bind(this._setAccessToken, this);
 
       this.getAccessToken = __bind(this.getAccessToken, this);
@@ -2771,6 +2742,8 @@
       this.setCountry = __bind(this.setCountry, this);
 
       this.getCountry = __bind(this.getCountry, this);
+
+      this._setPassword = __bind(this._setPassword, this);
 
       this._setPhoneNumber = __bind(this._setPhoneNumber, this);
 
@@ -2817,14 +2790,9 @@
     };
 
     KiiUser.prototype._setUsername = function(value) {
-      var pattern;
       Kii.logger("Setting username: " + value);
-      pattern = /^[A-Za-z]{1}[A-Za-z0-9-_]{3,63}$/i;
-      if ((typeof value).toLowerCase() !== "string") {
-        throw new InvalidUsernameException;
-      } else if (value.match(pattern)) {
-        Kii.logger("Matchedu");
-        return this._username = value;
+      if (KiiUtilities._validateUsername(value)) {
+        return this._username = $.trim(value);
       } else {
         throw new InvalidUsernameException;
       }
@@ -2890,6 +2858,14 @@
         return this._phoneNumber = value;
       } else {
         throw new InvalidPhoneNumberException;
+      }
+    };
+
+    KiiUser.prototype._setPassword = function(value) {
+      if (KiiUtilities._validatePassword(value)) {
+        return this._password = value;
+      } else {
+        throw new InvalidPasswordException;
       }
     };
 
@@ -2983,14 +2959,6 @@
       return Kii.logger("Setting access token: " + this._accessToken);
     };
 
-    KiiUser.prototype._setPassword = function(value) {
-      if (KiiUtilities._validatePassword(value)) {
-        return this._password = value;
-      } else {
-        throw new InvalidPasswordException;
-      }
-    };
-
     /** Get a specifically formatted string referencing the user
     
     <br><br>The user must exist in the cloud (have a valid UUID).
@@ -3052,10 +3020,10 @@
       return Kii.getCurrentUser();
     };
 
-    /** Create a user object with credentials pre-filled
+    /** Create a user object to prepare for registration with credentials pre-filled
     
     <br><br>Creates an pre-filled user object for manipulation. This user will not be authenticated until one of the authentication methods are called on it. It can be treated as any other KiiObject before it is authenticated.
-    @param username The user's desired username. Must be between 4-64 alphanumeric characters, must start with a letter.
+    @param username The user's desired username. Must be between 3 and 64 characters, which can include alphanumeric characters as well as underscores '_' and periods '.'
     @param password The user's password. Must be at least 4 characters, made up of alphanumeric and/or: @,#,$,%,^,&
     @returns a working KiiUser object
     @throws {InvalidUsernameException} If the username is not in the proper format
@@ -3073,22 +3041,59 @@
       return user;
     };
 
-    /** Create a user object with credentials pre-filled
+    KiiUser._userWithEmailAddress = function(emailAddress, password) {
+      var user;
+      user = new KiiUser();
+      user._setEmailAddress(emailAddress);
+      user._setPassword(password);
+      return user;
+    };
+
+    KiiUser._userWithPhoneNumber = function(phoneNumber, password) {
+      var user;
+      user = new KiiUser();
+      user._setPhoneNumber(phoneNumber);
+      user._setPassword(password);
+      return user;
+    };
+
+    /** Create a user object to prepare for registration with credentials pre-filled
     
-    <br><br>Creates an pre-filled user object for manipulation. This user will not be authenticated until one of the authentication methods are called on it. It can be treated as any other KiiCoreObject before it is authenticated. This method should only be used for authentication, as registration requires a username. This method can be used once the user's phone number has been verified.
+    <br><br>Creates an pre-filled user object for registration. This user will not be authenticated until the registration method is called on it. It can be treated as any other KiiUser before it is registered.
     @param phoneNumber The user's phone number
-    @param username The user's desired username. Must be between 4-64 alphanumeric characters, must start with a letter.
+    @param password The user's password. Must be at least 4 characters, made up of alphanumeric and/or: @,#,$,%,^,&
+    @throws {InvalidPasswordException} If the password is not in the proper format
+    @throws {InvalidPhoneNumberException} If the phone number is not in the proper format
+    @returns a working KiiUser object
+    @example 
+    var user = KiiUser.userWithPhoneNumber("15559847589", "mypassword");
+    */
+
+
+    KiiUser.userWithPhoneNumber = function(phoneNumber, password) {
+      var user;
+      user = new KiiUser();
+      user._setPhoneNumber(phoneNumber);
+      user._setPassword(password);
+      return user;
+    };
+
+    /** Create a user object to prepare for registration with credentials pre-filled
+    
+    <br><br>Creates an pre-filled user object for registration. This user will not be authenticated until the registration method is called on it. It can be treated as any other KiiUser before it is registered.
+    @param phoneNumber The user's phone number
+    @param username The user's desired username. Must be between 3 and 64 characters, which can include alphanumeric characters as well as underscores '_' and periods '.'
     @param password The user's password. Must be at least 4 characters, made up of alphanumeric and/or: @,#,$,%,^,&
     @throws {InvalidUsernameException} If the username is not in the proper format
     @throws {InvalidPasswordException} If the password is not in the proper format
     @throws {InvalidPhoneNumberException} If the phone number is not in the proper format
     @returns a working KiiUser object
     @example 
-    var user = KiiUser.userWithPhoneNumber("15559847589", "johndoe", "mypassword");
+    var user = KiiUser.userWithPhoneNumberAndUsername("15559847589", "johndoe", "mypassword");
     */
 
 
-    KiiUser.userWithPhoneNumber = function(phoneNumber, username, password) {
+    KiiUser.userWithPhoneNumberAndUsername = function(phoneNumber, username, password) {
       var user;
       user = new KiiUser();
       user._setPhoneNumber(phoneNumber);
@@ -3097,22 +3102,43 @@
       return user;
     };
 
-    /** Create a user object with credentials pre-filled
+    /** Create a user object to prepare for registration with credentials pre-filled
     
-    <br><br>Creates an pre-filled user object for manipulation. This user will not be authenticated until one of the authentication methods are called on it. It can be treated as any other KiiCoreObject before it is authenticated. This method should only be used for authentication, as registration requires a username. This method can be used once the user's phone number has been verified.
+    <br><br>Creates an pre-filled user object for registration. This user will not be authenticated until the registration method is called on it. It can be treated as any other KiiUser before it is registered.
     @param emailAddress The user's email address
-    @param username The user's desired username. Must be between 4-64 alphanumeric characters, must start with a letter.
+    @param password The user's password. Must be at least 4 characters, made up of alphanumeric and/or: @,#,$,%,^,&
+    @throws {InvalidPasswordException} If the password is not in the proper format
+    @throws {InvalidEmailException} If the email address is not in the proper format
+    @returns a working KiiUser object
+    @example 
+    var user = KiiUser.userWithEmailAddress("johndoe@example.com", "mypassword");
+    */
+
+
+    KiiUser.userWithEmailAddress = function(emailAddress, password) {
+      var user;
+      user = new KiiUser();
+      user._setEmailAddress(emailAddress);
+      user._setPassword(password);
+      return user;
+    };
+
+    /** Create a user object to prepare for registration with credentials pre-filled
+    
+    <br><br>Creates an pre-filled user object for registration. This user will not be authenticated until the registration method is called on it. It can be treated as any other KiiUser before it is registered.
+    @param emailAddress The user's email address
+    @param username The user's desired username. Must be between 3 and 64 characters, which can include alphanumeric characters as well as underscores '_' and periods '.'
     @param password The user's password. Must be at least 4 characters, made up of alphanumeric and/or: @,#,$,%,^,&
     @throws {InvalidUsernameException} If the username is not in the proper format
     @throws {InvalidPasswordException} If the password is not in the proper format
     @throws {InvalidEmailException} If the phone number is not in the proper format
     @returns a working KiiUser object
     @example 
-    var user = KiiUser.userWithEmailAddress("johndoe@example.com", "johndoe", "mypassword");
+    var user = KiiUser.userWithEmailAddressAndUsername("johndoe@example.com", "johndoe", "mypassword");
     */
 
 
-    KiiUser.userWithEmailAddress = function(emailAddress, username, password) {
+    KiiUser.userWithEmailAddressAndUsername = function(emailAddress, username, password) {
       var user;
       user = new KiiUser();
       user._setEmailAddress(emailAddress);
@@ -3180,16 +3206,23 @@
     };
 
     KiiUser.prototype._authenticate = function(callbacks) {
-      var authCallbacks, request,
+      var authCallbacks, request, username,
         _this = this;
       _thisUser = this;
       Kii.logger("Authenticating user " + this);
       Kii.logger(callbacks);
+      if (this._username != null) {
+        username = this._username;
+      } else if (this._emailAddress != null) {
+        username = this._emailAddress;
+      } else if (this._phoneNumber != null) {
+        username = this._phoneNumber;
+      }
       request = new KiiRequest("/oauth2/token", false);
       request.setAnonymous(true);
       request.setMethod("POST");
       request.setData({
-        username: this._username,
+        username: username,
         password: this._password
       });
       authCallbacks = {
@@ -3238,7 +3271,7 @@
     };
 
     /** Authenticates a user with the server
-    @param {String} username The username of the user to authenticate
+    @param {String} userIdentifier The username, validated email address, or validated phone number of the user to authenticate
     @param {String} password The password of the user to authenticate
     @param {Object} callbacks An object with callback methods defined
     @param {Method} callbacks.success The callback method to call on a successful authentication request
@@ -3256,10 +3289,22 @@
     */
 
 
-    KiiUser.authenticate = function(username, password, callbacks) {
+    KiiUser.authenticate = function(userIdentifier, password, callbacks) {
       var user;
-      user = KiiUser.userWithUsername(username, password);
-      return user._authenticate(callbacks);
+      try {
+        if (KiiUtilities._validateEmail(userIdentifier)) {
+          user = KiiUser._userWithEmailAddress(userIdentifier, password);
+        } else if (KiiUtilities._validatePhoneNumber(userIdentifier)) {
+          user = KiiUser._userWithPhoneNumber(userIdentifier, password);
+        } else {
+          user = KiiUser.userWithUsername(userIdentifier, password);
+        }
+        return user._authenticate(callbacks);
+      } catch (error) {
+        if (callbacks != null) {
+          return callbacks.failure(null, "Unable to authenticate. Ensure the user identifier and password are valid");
+        }
+      }
     };
 
     /** Asynchronously authenticates a user with the server using a valid access token
@@ -3314,10 +3359,11 @@
       _thisUser = this;
       Kii.logger("Registering user " + this);
       data = {
-        loginName: this._username,
-        displayName: this._username,
         password: this._password
       };
+      if (this._username != null) {
+        data.loginName = this._username;
+      }
       if (this._displayName != null) {
         data.displayName = this._displayName;
       }
@@ -3827,7 +3873,7 @@
 
     /** Updates the local user's data with the user data on the server
     
-    <br><br>The user must exist on the server. Local data will be overwritten.    	
+    <br><br>The user must exist on the server. Local data will be overwritten.      
     @param {Object} callbacks An object with callback methods defined
     @param {Method} callbacks.success The callback method to call on a successful refresh request
     @param {Method} callbacks.failure The callback method to call on a failed refresh request
@@ -4050,8 +4096,6 @@
       var pattern;
       value = $.trim(value);
       pattern = /^[a-z]{2}$/i;
-      console.log("Matched: " + (value.match(pattern)));
-      console.log("Length: " + value.length);
       if ((typeof value).toLowerCase() !== "string") {
         Kii.logger("Not string");
         return false;
@@ -4065,7 +4109,23 @@
 
     KiiUtilities._validatePassword = function(value) {
       var pattern;
+      Kii.logger("Validating password: " + value);
       pattern = /^[A-Za-z0-9\\@\\#\\$\\%\\^\\&]{4,}$/i;
+      if ((typeof value).toLowerCase() !== "string") {
+        Kii.logger("not string");
+        return false;
+      } else if (value.match(pattern)) {
+        Kii.logger("matched");
+        return true;
+      } else {
+        Kii.logger("other exception");
+        return false;
+      }
+    };
+
+    KiiUtilities._validateUsername = function(value) {
+      var pattern;
+      pattern = /^[a-zA-Z0-9-_\\.]{3,64}$/i;
       if ((typeof value).toLowerCase() !== "string") {
         return false;
       } else if (value.match(pattern)) {
@@ -4645,7 +4705,7 @@
   };
 
   root.InvalidUsernameException = function() {
-    return this.message = "Unable to set username. Must be between 4-64 alphanumeric characters, must start with a letter";
+    return this.message = "Unable to set username. Must be between 3 and 64 characters, which can include alphanumeric characters as well as underscores '_' and periods '.'";
   };
 
   root.InvalidEmailException = function() {
