@@ -1,1 +1,1 @@
-git archive -o HelloKii-JavaScript.zip HEAD
+git archive --prefix=HelloKii-JavaScript/ -o HelloKii-JavaScript.zip HEAD
