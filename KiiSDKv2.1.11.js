@@ -9,18 +9,14 @@ var KiiRequest, KiiUtilities, root, _Kii, _KiiSocialConnect,
 root = ((typeof exports) !== "undefined") && (exports !== null) ? new Object() : this;
 
 root.KiiSocialNetworkName = {
-  FACEBOOK: 1
+  FACEBOOK: 1,
+  TWITTER: 2
 };
 
 root.KiiSite = {
   US: "https://api.kii.com/api",
   JP: "https://api-jp.kii.com/api",
   CN: "https://api-cn2.kii.com/api"
-};
-
-root.KiiSiteInternal = {
-  DEV: "https://dev-jp.internal.kii.com/api",
-  STG: "https://qa21.internal.kii.com/api"
 };
 
 /**
@@ -55,7 +51,7 @@ root.Kii = (function() {
 
 
   Kii.getSDKVersion = function() {
-    return "2.1.4";
+    return "2.1.11";
   };
 
   Kii.getBaseURL = function() {
@@ -96,8 +92,7 @@ root.Kii = (function() {
   Should be the first Kii SDK action your application makes
   @param String appID The application ID found in your Kii developer console
   @param String appKey The application key found in your Kii developer console
-  @param KiiSite site Can be one of the constants KiiSite.US or KiiSite.JP depending on your location.
-  NOTE: KiiSite.CN is not available now. Please wait for official launch of Cloud in China.
+  @param KiiSite site Can be one of the constants KiiSite.US, KiiSite.JP or KiiSite.CN depending on your location.
   @example
   Kii.initializeWithSite("my-app-id", "my-app-key", KiiSite.JP);
   */
@@ -179,7 +174,8 @@ root.Kii = (function() {
   };
 
   Kii.logOut = function() {
-    return _instance._currentUser = null;
+    _instance._currentUser = null;
+    return root.KiiSocialConnect.logOutAll();
   };
 
   Kii.loggedIn = function() {
@@ -305,17 +301,6 @@ _Kii = (function() {
   _Kii.prototype._currentUser = null;
 
   function _Kii(appID, appKey, site) {
-    if (site === root.KiiSite.JP) {
-      site = root.KiiSite.JP;
-    } else if (site === root.KiiSite.CN) {
-      site = root.KiiSite.CN;
-    } else if (site === root.KiiSiteInternal.DEV) {
-      site = root.KiiSiteInternal.DEV;
-    } else if (site === root.KiiSiteInternal.STG) {
-      site = root.KiiSiteInternal.STG;
-    } else {
-      site = root.KiiSite.US;
-    }
     console.log("Setting site: " + site);
     this._appKey = appKey;
     this._appID = appID;
@@ -947,13 +932,15 @@ root.KiiBucket = (function() {
   };
 
   /** Delete the given bucket from the server
-  
+  @name delete
+  @memberOf root.KiiBucket#
+  @function
   @param Object callbacks An object with callback methods defined
   @param {Method} callbacks.success The callback method to call on a successful query request
   @param {Method} callbacks.failure The callback method to call on a failed query request
   @example 
   var bucket = . . .; // a KiiBucket
-  bucket.delete({
+  bucket['delete']({
       success: function(deletedBucket) {
           // do something with the result
       },
@@ -1142,7 +1129,7 @@ root.KiiGroup = (function() {
     this.bucketWithName = __bind(this.bucketWithName, this);
     this.objectURI = __bind(this.objectURI, this);
     this._setOwner = __bind(this._setOwner, this);
-    this.getOwner = __bind(this.getOwner, this);
+    this.getCachedOwner = __bind(this.getCachedOwner, this);
     this._setName = __bind(this._setName, this);
     this.getName = __bind(this.getName, this);
     this._setUUID = __bind(this._setUUID, this);
@@ -1192,12 +1179,23 @@ root.KiiGroup = (function() {
     this._groupName = _groupName;
   };
 
-  /** Get the creator of this group
-  @returns {KiiUser}
+  /** Returns the owner of this group if this group holds the information of owner.
+  
+  Group will holds the information of owner when "saving group on cloud" or "retrieving group info/owner from cloud".
+  The cache will not be shared among the different instances of KiiGroup.
+  <UL>
+  <LI>This API will not access to server.
+  To update the group owner information on cloud, please call {@link KiiGroup#refresh} or {@link KiiGroup#getOwner}.
+  </LI>
+  <LI>This API does not return all the properties of the owner.
+  To get all owner properties, {@link KiiUser#refresh} is necessary.</LI>
+  </UL>
+  @returns {KiiUser} KiiUser who owns this group, undefined if this group doesn't hold the information of owner yet.
+  @link KiiGroup#getOwner
   */
 
 
-  KiiGroup.prototype.getOwner = function() {
+  KiiGroup.prototype.getCachedOwner = function() {
     return this._owner;
   };
 
@@ -1306,17 +1304,17 @@ root.KiiGroup = (function() {
 
         ndx = $.inArray(member, _thisGroup._getAddMembers());
         KiiUtilities.arrayRemove(_thisGroup._getAddMembers(), ndx, ndx);
-        return callback();
+        return callback.success(_thisGroup);
       },
       failure: function(error, statusCode) {
         var ndx;
 
         ndx = $.inArray(member, _thisGroup._getAddMembers());
         KiiUtilities.arrayRemove(_thisGroup._getAddMembers(), ndx, ndx);
-        return callback();
+        return callback.failure(_thisGroup, error);
       }
     };
-    return request.execute(memberCallbacks, true);
+    return request.execute(memberCallbacks, false);
   };
 
   KiiGroup.prototype._removeMember = function(member, callback) {
@@ -1336,17 +1334,17 @@ root.KiiGroup = (function() {
 
         ndx = $.inArray(member, _thisGroup._getRemoveMembers());
         KiiUtilities.arrayRemove(_thisGroup._getRemoveMembers(), ndx, ndx);
-        return callback();
+        return callback.success(_thisGroup);
       },
       failure: function(error, statusCode) {
         var ndx;
 
         ndx = $.inArray(member, _thisGroup._getRemoveMembers());
         KiiUtilities.arrayRemove(_thisGroup._getRemoveMembers(), ndx, ndx);
-        return callback();
+        return callback.failure(_thisGroup, error);
       }
     };
-    return request.execute(removeCallbacks, true);
+    return request.execute(removeCallbacks, false);
   };
 
   /** Gets a list of all current members of a group				
@@ -1409,24 +1407,19 @@ root.KiiGroup = (function() {
   };
 
   KiiGroup.prototype._saveMembers = function(callbacks) {
-    var member, _i, _j, _len, _len1, _ref, _ref1,
-      _this = this;
+    var member, _i, _j, _len, _len1, _ref, _ref1;
 
     _thisGroup = this;
     _ref = this._removeMembers;
     for (_i = 0, _len = _ref.length; _i < _len; _i++) {
       member = _ref[_i];
-      this._removeMember(member, function() {
-        return _thisGroup._saveMembers(callbacks);
-      });
+      this._removeMember(member, callbacks);
       return;
     }
     _ref1 = this._addMembers;
     for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
       member = _ref1[_j];
-      this._addMember(member, function() {
-        return _thisGroup._saveMembers(callbacks);
-      });
+      this._addMember(member, callbacks);
       return;
     }
     return callbacks.success(_thisGroup);
@@ -1491,7 +1484,7 @@ root.KiiGroup = (function() {
 
   /** Saves the latest group values to the server
   
-  <br><br>If the group does not yet exist, it will be created. If the group already exists, the fields that have changed will be updated accordingly.
+  <br><br>If the group does not yet exist, it will be created. If the group already exists, the members that have changed will be updated accordingly. If the group already exists and there is no updates of members, it will allways succeed but does not execute update. To change the name of group, use {@link #changeGroupName}.
   @param {Object} callbacks An object with callback methods defined
   @param {Method} callbacks.success The callback method to call on a successful save request
   @param {Method} callbacks.failure The callback method to call on a failed save request
@@ -1595,12 +1588,15 @@ root.KiiGroup = (function() {
   };
 
   /** Delete the group from the server
+  @name delete
+  @memberOf root.KiiGroup#
+  @function
   @param {Object} callbacks An object with callback methods defined
   @param {Method} callbacks.success The callback method to call on a successful delete request
   @param {Method} callbacks.failure The callback method to call on a failed delete request
   @example 
   var group = . . .; // a KiiGroup
-  group.delete({
+  group['delete']({
       success: function(theDeletedGroup) {
           // do something
       },
@@ -1642,6 +1638,9 @@ root.KiiGroup = (function() {
 
   /** Gets the owner of the associated group
   
+  This API does not return all the properties of the owner.
+  To get all owner properties, {@link KiiUser#refresh} is necessary.
+  
   @param {Object} callbacks An object with callback methods defined
   @param {Method} callbacks.success The callback method to call on a successful add request
   @param {Method} callbacks.failure The callback method to call on a failed add request
@@ -1659,7 +1658,7 @@ root.KiiGroup = (function() {
   */
 
 
-  KiiGroup.prototype.getOwner = function(member, callbacks) {
+  KiiGroup.prototype.getOwner = function(callbacks) {
     var _this = this;
 
     _thisGroup = this;
@@ -1667,7 +1666,7 @@ root.KiiGroup = (function() {
     return this.refresh({
       success: function(group) {
         if (callbacks != null) {
-          return callbacks.success(group, group.getOwner());
+          return callbacks.success(group, group.getCachedOwner());
         }
       },
       failure: function(group, error) {
@@ -1873,6 +1872,8 @@ root.KiiObject = (function() {
   };
 
   function KiiObject() {
+    this.moveBody = __bind(this.moveBody, this);
+    this._parseObjectUri = __bind(this._parseObjectUri, this);
     this._userWithID = __bind(this._userWithID, this);
     this._getRequest = __bind(this._getRequest, this);
     this["delete"] = __bind(this["delete"], this);
@@ -1883,6 +1884,8 @@ root.KiiObject = (function() {
     this._updateWithJSON = __bind(this._updateWithJSON, this);
     this.objectURI = __bind(this.objectURI, this);
     this.objectACL = __bind(this.objectACL, this);
+    this.getGeoPoint = __bind(this.getGeoPoint, this);
+    this.setGeoPoint = __bind(this.setGeoPoint, this);
     this.get = __bind(this.get, this);
     this.set = __bind(this.set, this);
     this._getPath = __bind(this._getPath, this);
@@ -1917,6 +1920,11 @@ root.KiiObject = (function() {
   /** Sets a key/value pair to a KiiObject
   
   <br><br>If the key already exists, its value will be written over. If the object is of invalid type, it will return false and a KiiError will be thrown (quietly). Accepted types are any JSON-encodable objects.
+  <br><b>NOTE: Before involving floating point value, please consider using integer instead. For example, use percentage, permil, ppm, etc.</br></b>
+  The reason is:
+   <li>Will dramatically improve the performance of bucket query.</li>
+   <li>Bucket query does not support the mixed result of integer and floating point.
+   ex.) If you use same key for integer and floating point and inquire object with the integer value, objects which has floating point value with the key would not be evaluated in the query. (and vice versa)</li> 
   @param {String} key The key to set. The key must not be a system key (created, metadata, modified, type, uuid) or begin with an underscore (_)
   @param {Object} value The value to be set. Object must be of a JSON-encodable type (Ex: dictionary, array, string, number, etc)
   @example 
@@ -1941,6 +1949,38 @@ root.KiiObject = (function() {
 
   KiiObject.prototype.get = function(key) {
     return this._customInfo[key];
+  };
+
+  /**
+      Set Geo point to this object with the specified key.
+      @param {String} key The key to set.
+      @param {KiiGeoPoint} KiiGeoPoint to be tied to the specified key.
+      @throws {String}  Specified kiiGeoPint is not an instance of KiiGeoPoint.
+  */
+
+
+  KiiObject.prototype.setGeoPoint = function(key, kiiGeoPoint) {
+    if (!(kiiGeoPoint instanceof KiiGeoPoint)) {
+      throw InvalidArgumentException("Specified kiiGeoPoint is not an instance of KiiGeoPoint");
+    }
+    this._customInfo[key] = kiiGeoPoint._toDict();
+    return this._alteredFields.push(key);
+  };
+
+  /**
+      Gets the geo point associated with the given key.
+      @param {String} key The key of the geo point to retrieve.
+      @returns {KiiGeoPoint} KiiGeoPoint tied to the key. null if null exists.
+  */
+
+
+  KiiObject.prototype.getGeoPoint = function(key) {
+    var lat, lon, point;
+
+    point = this._customInfo[key];
+    lat = point.lat;
+    lon = point.lon;
+    return root.KiiGeoPoint.geoPoint(lat, lon);
   };
 
   /** Get the ACL handle for this file
@@ -2000,6 +2040,8 @@ root.KiiObject = (function() {
         _results.push(this._owner = this._userWithID(val));
       } else if (key === "_dataType") {
         _results.push(this._objectType = val);
+      } else if (key === "_calculated") {
+        _results.push(this._customInfo[key] = val);
       } else if (key[0] !== "_") {
         _results.push(this._customInfo[key] = val);
       } else {
@@ -2036,6 +2078,7 @@ root.KiiObject = (function() {
     }
     if ((this._uuid != null) && !allFields) {
       request.addHeader("X-HTTP-Method-Override", "PATCH");
+      request.setMethod("POST");
     }
     saveCallbacks = {
       success: function(data, statusCode) {
@@ -2157,12 +2200,15 @@ root.KiiObject = (function() {
   };
 
   /** Delete the object from the server
+  @name delete
+  @memberOf root.KiiObject#
+  @function
   @param {Object} callbacks An object with callback methods defined
   @param {Method} callbacks.success The callback method to call on a successful delete request
   @param {Method} callbacks.failure The callback method to call on a failed delete request
   @example 
   var obj = . . .; // a KiiObject
-  obj.delete({
+  obj['delete']({
       success: function(theDeletedObject) {
           // do something
       },
@@ -2268,6 +2314,108 @@ root.KiiObject = (function() {
 
     user = root.KiiUser._userWithID(id);
     return user;
+  };
+
+  KiiObject.prototype._parseObjectUri = function(uri) {
+    var data, targetData, uriElement, uriPrefix;
+
+    uriElement = uri.replace(/^kiicloud:\/\//g, "").split("/");
+    uriPrefix = uriElement[0];
+    if (uriPrefix === "users") {
+      targetData = {
+        'appID': root.Kii.getAppID(),
+        'userID': uriElement[1],
+        'type': "APP_AND_USER"
+      };
+      data = {
+        'targetObjectScope': targetData,
+        'targetBucketID': uriElement[3],
+        'targetObjectID': uriElement[5]
+      };
+    } else if (uriPrefix === "groups") {
+      targetData = {
+        'appID': root.Kii.getAppID(),
+        'groupID': uriElement[1],
+        'type': "APP_AND_GROUP"
+      };
+      data = {
+        'targetObjectScope': targetData,
+        'targetBucketID': uriElement[3],
+        'targetObjectID': uriElement[5]
+      };
+    } else {
+      targetData = {
+        'appID': root.Kii.getAppID(),
+        'type': "APP"
+      };
+      data = {
+        'targetObjectScope': targetData,
+        'targetBucketID': uriElement[1],
+        'targetObjectID': uriElement[3]
+      };
+    }
+    return data;
+  };
+
+  /** Move KiiObject body from an object to another object.
+  <br>
+  This moving can be allowed under same application, across different scopes
+  and source/target KiiObject have a read and write permission (READ_EXISTING_OBJECT and WRITE_EXISTING_OBJECT).
+  <br><br>If target KiiObject has a body, it will be overwritten.
+  @param {String} targetObjectUri A KiiObject URI which KiiObject body is moved to.
+  @param {Object} callbacks An object with callback methods defined
+  @param {Method} callbacks.success The callback method to call on a successful move request
+  @param {Method} callbacks.failure The callback method to call on a failed move request
+  @example
+  var sourceObject = ...; // Source KiiObject
+  var targetObject = ...; // Target KiiObject
+  var targetObjectUri = targetObject.objectURI();
+  sourceObject.moveBody(targetObjectUri, {
+      success: function(theSrcObject, theTgtObjectUri) {
+          // Do something with the objects
+      },
+  
+      failure: function(theSrcObject, theTgtObjectUri, anErrorString) {
+          // Do something with the error response
+      }
+  });
+  */
+
+
+  KiiObject.prototype.moveBody = function(targetObjectUri, callbacks) {
+    var moveCallbacks, path, request, _sourceObject,
+      _this = this;
+
+    _sourceObject = this;
+    if (targetObjectUri == null) {
+      throw root.InvalidArgumentException('targetObjectUri is required');
+    }
+    if (_sourceObject.getUUID() == null) {
+      throw root.InvalidArgumentException('Source object is not saved on the cloud');
+    }
+    path = this._getPath() + "/body/move";
+    request = new this._getRequest({
+      path: path,
+      withApp: true
+    });
+    request.setMethod("POST");
+    request.setContentType("application/vnd.kii.ObjectBodyMoveRequest+json");
+    request.setData(this._parseObjectUri(targetObjectUri));
+    moveCallbacks = {
+      success: function(data, statusCode) {
+        if (statusCode < 300 && statusCode >= 200 && (callbacks != null)) {
+          return callbacks.success(_sourceObject, targetObjectUri);
+        } else if (callbacks != null) {
+          return callbacks.failure(_sourceObject, targetObjectUri, "Unable to parse response");
+        }
+      },
+      failure: function(error, statusCode) {
+        if (callbacks != null) {
+          return callbacks.failure(_sourceObject, targetObjectUri, error);
+        }
+      }
+    };
+    return request.execute(moveCallbacks, true);
   };
 
   return KiiObject;
@@ -2647,6 +2795,127 @@ root.KiiClause = (function() {
     return root.KiiClause.create("prefix", key, value);
   };
 
+  /**
+      Create a clause of geo distance. This clause inquires objects in the specified circle.
+      @param {String} key Name of the key to inquire, which holds geo point.
+      @param {KiiGeoPoint} center Geo point which specify center of the circle.
+      @param {Number} radius Radius of the circle. unit is meter. value should be in range of ]0, 20000000]
+      @param {String} putDistanceInto Used for retrieve distance from the center from the query result.Must match the pattern "^[a-zA-Z_][a-zA-Z0-9_]*$".
+      If the specified value is null, query result will not contain the distance.
+      <b>Note:</b> You can get the results in ascending order of distances from center. To do so, build the orderBy field  by
+      "_calculated.{specified value of putDistanceInto}" and pass it in {@link KiiQuery#sortByAsc}. Note that, descending order
+      of distances is not supported. The unit of distance is meter.
+      @return {KiiClause} KiiClaluse reference.
+      @throws {String}<li> Specified key is not a string or an empty string.</li>
+              <li>center is not an object of KiiGeoPoint.</li>
+              <li>putDistanceInto is not a string or an empty string.</li>
+  
+      @example
+          var putDistanceInto = "distanceFromCurrentLoc";
+          var currentLoc = ..; // current location
+          var clause = KiiClause.geoDistance("location", currentLoc, 4000, putDistanceInto);
+          var query = KiiQuery.queryWithClause(clause);
+          // Sort by distances by ascending order.(Optional, use only if you intend to retrieve the distances in a ascending order).
+          var orderByKey = "_calculated." + putDistanceInto;
+          query.sortByAsc(orderByKey);
+          // Define the callbacks
+          var bucket = Kii.bucketWithName("MyBucket"); 
+          var queryCallback = {
+              success: function(queryPerformed, resultSet, nextQuery) {
+                  // check the first object from resultSet.
+                  var object = resultSet[0];
+                  var point = object.get("location");
+                  var distanceToMyLocation = object.get("_calculated")[putDistanceInto];
+              },
+              failure: function(queryPerformed, anErrorString) {
+                  // do something with the error response
+              }
+          };
+          bucket.executeQuery(query, queryCallback);
+  */
+
+
+  KiiClause.geoDistance = function(key, center, radius, putDistanceInto) {
+    var expression, isValidGeoPoint, isValidString, pattern, _dict;
+
+    isValidString = function(str) {
+      return typeof str === 'string' && str.length > 0;
+    };
+    isValidGeoPoint = function(point) {
+      if (point == null) {
+        return false;
+      }
+      return point instanceof KiiGeoPoint;
+    };
+    if (!isValidString(key)) {
+      throw root.InvalidArgumentException("Specified key is not a string or is an empty string.");
+    }
+    if (!isValidGeoPoint(center)) {
+      throw root.InvalidArgumentException("center is not a reference of KiiGeoPoint.");
+    }
+    pattern = "^[a-zA-Z_][a-zA-Z0-9_]*$";
+    if ((putDistanceInto != null) && !putDistanceInto.match(pattern)) {
+      throw root.InvalidArgumentException("putDistanceInto is invalid.");
+    }
+    if (radius <= 0 || radius > 20000000 || isNaN(radius)) {
+      throw root.InvalidArgumentException("radius is invalid.");
+    }
+    expression = new root.KiiClause();
+    _dict = {};
+    _dict.type = "geodistance";
+    _dict.field = key;
+    center = center._toDict();
+    _dict.center = center;
+    _dict.radius = radius;
+    _dict.putDistanceInto = putDistanceInto;
+    expression._setDictValue(_dict);
+    return expression;
+  };
+
+  /**
+      Create a clause of geo box. This clause inquires objects in the specified rectangle.
+      Rectangle would be placed parallel to the equator with specified coordinates of the corner.
+      @param {String} key Key to inquire which holds geo point.
+      @param {KiiGeoPoint} northEast North-Eest corner of the rectangle.
+      @param {KiiGeoPoint} southWest South-Wast corner of the rectangle.
+      @return {KiiClause}  KiiClause reference.
+      @throws {String}<li> Specified key is not a string or is an empty string.</li>
+              <li>northEast or southWest is not a reference of KiiGeoPoint.</li>
+  */
+
+
+  KiiClause.geoBox = function(key, northEast, southWest) {
+    var expression, isValidGeoPoint, isValidKey, ne, sw, _dict;
+
+    isValidKey = function(key) {
+      return typeof key === 'string' && key.length > 0;
+    };
+    isValidGeoPoint = function(point) {
+      if (point == null) {
+        return false;
+      }
+      return point instanceof KiiGeoPoint;
+    };
+    if (!isValidKey(key)) {
+      throw root.InvalidArgumentException("Specified key is not a string or is an empty string.");
+    }
+    if (!isValidGeoPoint(northEast) || !isValidGeoPoint(southWest)) {
+      throw root.InvalidArgumentException("northEast or southWest is not a reference of KiiGeoPoint.");
+    }
+    expression = new root.KiiClause();
+    _dict = {};
+    _dict.type = "geobox";
+    _dict.field = key;
+    ne = northEast._toDict();
+    sw = southWest._toDict();
+    _dict.box = {
+      ne: ne,
+      sw: sw
+    };
+    expression._setDictValue(_dict);
+    return expression;
+  };
+
   return KiiClause;
 
 }).call(this);
@@ -2793,6 +3062,7 @@ KiiRequest = (function() {
     root.Kii.logger("Making request[" + this._method + "] to " + url + " with data: " + json_text);
     this._headers['x-kii-appid'] = root.Kii.getAppID();
     this._headers['x-kii-appkey'] = root.Kii.getAppKey();
+    this._headers['x-kii-sdk'] = root.KiiSDKClientInfo.getSDKClientInfo();
     if (this._accept != null) {
       this._headers['accept'] = this._accept;
     }
@@ -2923,6 +3193,7 @@ root.KiiUser = (function() {
     this.save = __bind(this.save, this);
     this.changeEmail = __bind(this.changeEmail, this);
     this.changePhone = __bind(this.changePhone, this);
+    this.ownerOfGroups = __bind(this.ownerOfGroups, this);
     this.memberOfGroups = __bind(this.memberOfGroups, this);
     this.resendPhoneNumberVerification = __bind(this.resendPhoneNumberVerification, this);
     this.resendEmailVerification = __bind(this.resendEmailVerification, this);
@@ -3761,9 +4032,9 @@ root.KiiUser = (function() {
 
   /** Reset a user's password on the server
   
-  <br><br>Reset a user's password on the server. The user is determined by the specified userIdentifier - which can be an email address or phone number that has already been associated with an account. Reset instructions will be sent to that identifier.
+  <br><br>Reset a user's password on the server. The user is determined by the specified userIdentifier - which is an email address that has already been associated with an account. Reset instructions will be sent to that identifier.
   <br><br><b>Please Note:</b> This will reset the user's access token, so if they are currently logged in - their session will no longer be valid.
-  @param {String} userIdentifier The user's current password
+  @param {String} userIdentifier The user's email address 
   @param {Object} callbacks An object with callback methods defined
   @param {Method} callbacks.success The callback method to call on a successful update password request
   @param {Method} callbacks.failure The callback method to call on a failed update password request
@@ -3786,10 +4057,8 @@ root.KiiUser = (function() {
     root.Kii.logger("Resetting password with identifier: " + userIdentifier);
     if (KiiUtilities._validateEmail(userIdentifier)) {
       accountType = "EMAIL";
-    } else if (KiiUtilities._validatePhoneNumber(userIdentifier)) {
-      accountType = "PHONE";
     } else if (callbacks != null) {
-      callbacks.failure("Invalid user identifier. Must be a valid email address or phone number");
+      callbacks.failure("Invalid user identifier. Must be a valid email address");
       return;
     }
     if (accountType != null) {
@@ -3985,6 +4254,68 @@ root.KiiUser = (function() {
     _thisUser = this;
     root.Kii.logger("Getting groups for member " + this._uuid);
     path = "/groups/?is_member=" + this._uuid;
+    request = this._getRequest({
+      path: path,
+      withApp: true
+    });
+    request.setAccept("application/vnd.kii.GroupsRetrievalResponse+json");
+    memberCallbacks = {
+      success: function(data, statusCode) {
+        var group, groupList, _i, _len, _ref;
+
+        if (statusCode < 300 && statusCode >= 200) {
+          groupList = [];
+          _ref = data.groups;
+          for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+            group = _ref[_i];
+            groupList.push(root.KiiGroup._groupWithJSON(group));
+          }
+          if (callbacks != null) {
+            return callbacks.success(_thisUser, groupList);
+          }
+        } else if (callbacks != null) {
+          return callbacks.failure(_thisUser, "Unable to retrieve groups");
+        }
+      },
+      failure: function(error, statusCode) {
+        if (callbacks != null) {
+          return callbacks.failure(_thisUser, error);
+        }
+      }
+    };
+    return request.execute(memberCallbacks, false);
+  };
+
+  /**Retrieve the groups owned by this user. Group in the groupList
+  does not contain all the property of group. To get all the
+  property from cloud, a {@link KiiGroup#refresh(callback)} is necessary.
+  @param {Object} callbacks An object with callback methods defined
+  @param {Method} callbacks.success The callback method to call on a successful resend request
+  @param {Method} callbacks.failure The callback method to call on a failed resend request
+  @example 
+  var user = Kii.currentUser();
+  user.ownerOfGroups({
+      success: function(theUser, groupList) {
+          // do something with the results
+          for(var i=0; i&lt;groupList.length; i++) {
+              var g = groupList[i]; // a KiiGroup object
+          }
+      },
+      
+      failure: function(theUser, anErrorString) {
+          // do something with the error response
+      }
+  });
+  */
+
+
+  KiiUser.prototype.ownerOfGroups = function(callbacks) {
+    var memberCallbacks, path, request,
+      _this = this;
+
+    _thisUser = this;
+    root.Kii.logger("Getting groups owned by the user " + this._uuid);
+    path = "/groups/?owner=" + this._uuid;
     request = this._getRequest({
       path: path,
       withApp: true
@@ -4243,12 +4574,15 @@ root.KiiUser = (function() {
   };
 
   /** Delete the user from the server
+  @name delete
+  @memberOf root.KiiUser#
+  @function
   @param {Object} callbacks An object with callback methods defined
   @param {Method} callbacks.success The callback method to call on a successful delete request
   @param {Method} callbacks.failure The callback method to call on a failed delete request
   @example 
   var user = Kii.getCurrentUser(); // a KiiUser
-  obj.delete({
+  user['delete']({
       success: function(theDeletedUser) {
           // do something
       },
@@ -4523,12 +4857,88 @@ root.KiiSocialConnect = (function() {
 
   /** Set up a reference to one of the supported KiiSocialNetworks.
    
-   The user will not be authenticated or linked to a KiiUser
-   until one of those methods are called explicitly.
+  Set up the network. Need to be called before accessing other methods.
+              <br><b> Facebook </b>
+              <table border="1" cellspacing="0">
+              <thead>
+              <tr bgcolor="#CCCCFF">
+                  <th>Argument</th>
+                  <th>Value Type</th>
+                  <th>Value</th>
+                  <th>Note</th>
+              </tr>
+              </thead>
+              <tbody>
+              <tr>
+                  <td>networkName</td>
+                  <td>Number</td>
+                  <td>KiiSocialNetworkName.FACEBOOK</td>
+                  <td>Specify Facebook</td>
+              </tr>
+              <tr>
+                  <td>apiKey</td>
+                  <td>String</td>
+                  <td>apiKey of Facebook</td>
+                  <td>Obtained from facebook developer portal.</td>
+              </tr>
+              <tr>
+                  <td>apiSecret</td>
+                  <td>String</td>
+                  <td>null</td>
+                  <td>Facebook does not requires this argument.</td>
+              </tr>
+              <tr>
+                  <td>extras</td>
+                  <td>Object</td>
+                  <td>Required to initialize FB sdk</td>
+                  <td>For details refer to <a href="https://developers.facebook.com/docs/reference/javascript/">Facebook developer</a>.</td>
+              </tr>
+              </tbody>
+              </table>
+  
+              <br><b> Twitter </b>
+              <table border="1" cellspacing="0">
+              <thead>
+              <tr bgcolor="#CCCCFF">
+                  <th>Argument</th>
+                  <th>Value Type</th>
+                  <th>Value</th>
+                  <th>Note</th>
+              </tr>
+              </thead>
+              <tbody>
+              <tr>
+                  <td>networkName</td>
+                  <td>Number</td>
+                  <td>KiiSocialNetworkName.TWITTER</td>
+                  <td>Specify Twitter</td>
+              </tr>
+              <tr>
+                  <td>apiKey</td>
+                  <td>String</td>
+                  <td>null</td>
+                  <td>Twitter does not requires this argument.</td>
+              </tr>
+              <tr>
+                  <td>apiSecret</td>
+                  <td>String</td>
+                  <td>null</td>
+                  <td>Twitter does not requires this argument.</td>
+              </tr>
+              <tr>
+                  <td>extras</td>
+                  <td>Object</td>
+                  <td>null</td>
+                  <td>Twitter does not requires this argument.</td>
+              </tr>
+              </tbody>
+              </table>
+  
    @param {KiiSocialNetworkName} networkName One of the supported KiiSocialNetworkName values
-   @param {String} apiKey The SDK key assigned by the social network provider
-   @param {String} apiSecret The SDK secret assigned by the social network provider
-   @param {Object} extras Extra options that should be passed to the SNS. Examples could be (Facebook) a dictionary of permissions to grant to the authenticated user.
+   @param {String} apiKey The SDK key assigned by the social network provider. For details refer to the table above.
+   @param {String} apiSecret The SDK secret assigned by the social network provider. For details refer to the table above.
+   @param {Object} extras Extra options that should be passed to the SNS. For details refer to the table above.
+   @throws {InvalidArgumentException} For details refer to the table above
   */
 
 
@@ -4546,15 +4956,72 @@ root.KiiSocialConnect = (function() {
 
   /** Log a user into the social network provided
    
-   This will initiate the login process for the given network. If a KiiUser has already been authenticated, this will authenticate and link the user to the network. Otherwise, this will generate a KiiUser that is automatically linked to the social network. The network must already be set up via setupNetwork
+   This will initiate the login process for the given network. If user has already linked with the specified social network,
+   sign-in with the social network. Otherwise, this will sign-up and create new user authenticated by the specified social network.
+   The network must already be set up via setupNetwork
    @param networkName One of the supported KiiSocialNetworkName values
    @param options A dictionary of key/values to pass to KiiSocialConnect
+  
+      <br><b> Facebook </b>
+              <table border="1" cellspacing="0">
+              <thead>
+              <tr bgcolor="#CCCCFF">
+                  <th>Key</th>
+                  <th>Value type</th>
+                  <th>Value</th>
+                  <th>Note</th>
+              </tr>
+              </thead>
+              <tbody>
+              <tr>
+                  <td>access_token</td>
+                  <td>String</td>
+                  <td>Access token of Facebook.</td>
+                  <td>If provided, KiiCloud uses this token while login using Facebook.</td>
+              </tr>
+              <tr>
+                  <td>permissions</td>
+                  <td>Object</td>
+                  <td>Object which has property named 'scope' and value is a string that is comma seperated list of permissions defined by facebook. ex) {scope: 'email,user_likes'} </td>
+                  <td>Facebook : <a href="http://developers.facebook.com/docs/authentication/permissions">Facebook permissions</a>. If omit, the app can only access the information of the users public profile. </td>
+              </tr>
+              </tbody>
+              </table>
+  
+              <br><b> Twitter </b>
+              <table border="1" cellspacing="0">
+              <thead>
+              <tr bgcolor="#CCCCFF">
+                  <th>Key</th>
+                  <th>Value type</th>
+                  <th>Value</th>
+                  <th>Note</th>
+              </tr>
+              </thead>
+              <tbody>
+              <tr>
+                  <td>oauth_token</td>
+                  <td>String</td>
+                  <td>OAuth access token of twitter.</td>
+                  <td>This is mandatory. </td>
+              </tr>
+              <tr>
+                  <td>oauth_token_secret</td>
+                  <td>String</td>
+                  <td>OAuth access token secret of twitter.</td>
+                  <td>This is mandatory.</td>
+              </tr>
+              </tbody>
+              </table>
+  
+  
    @param {Object} callbacks An object with callback methods defined
    @param {Method} callbacks.success The callback method to call on a successful log in request
    @param {Method} callbacks.failure The callback method to call on a failed log in request
+   @throws {InvalidArgumentException} If access token or access token secret does not exist or invalid(null or empty) in specified options.
    @example 
-   
-   KiiSocialConnect.logIn(KiiSocialNetworkName.FACEBOOK, {
+   // Example of using no option
+   KiiSocialConnect.logIn(KiiSocialNetworkName.FACEBOOK, null, {
    
        success: function(user, network) {
            // do something now that the user is logged in
@@ -4591,12 +5058,66 @@ root.KiiSocialConnect = (function() {
    This will initiate the login process for the given network, which for SSO-enabled services like Facebook, will send the user to the Facebook site for authentication. There must be a currently authenticated KiiUser. Otherwise, you can use the logIn: method to create and log in a KiiUser using a network. The network must already be set up via setupNetwork
    @param networkName One of the supported KiiSocialNetworkName values
    @param options A dictionary of key/values to pass to KiiSocialConnect
+      <br><b> Facebook </b>
+              <table border="1" cellspacing="0">
+              <thead>
+              <tr bgcolor="#CCCCFF">
+                  <th>Key</th>
+                  <th>Value type</th>
+                  <th>Value</th>
+                  <th>Note</th>
+              </tr>
+              </thead>
+              <tbody>
+              <tr>
+                  <td>access_token</td>
+                  <td>String</td>
+                  <td>Access token of Facebook.</td>
+                  <td>If provided, KiiCloud uses this token while login using Facebook.</td>
+              </tr>
+              <tr>
+                  <td>permissions</td>
+                  <td>Object</td>
+                  <td>Object which has property named 'scope' and value is a string that is comma seperated list of permissions defined by facebook. ex) {scope: 'email,user_likes'} </td>
+                  <td>Facebook : <a href="http://developers.facebook.com/docs/authentication/permissions">Facebook permissions</a>. If omit, the app can only access the information of the users public profile. </td>
+              </tr>
+              </tbody>
+              </table>
+  
+              <br><b> Twitter </b>
+              <table border="1" cellspacing="0">
+              <thead>
+              <tr bgcolor="#CCCCFF">
+                  <th>Key</th>
+                  <th>Value type</th>
+                  <th>Value</th>
+                  <th>Note</th>
+              </tr>
+              </thead>
+              <tbody>
+              <tr>
+                  <td>oauth_token</td>
+                  <td>String</td>
+                  <td>OAuth access token of twitter.</td>
+                  <td>This is mandatory.</td>
+              </tr>
+              <tr>
+                  <td>oauth_token_secret</td>
+                  <td>String</td>
+                  <td>OAuth access token secret of twitter.</td>
+                  <td>This is mandatory.</td>
+              </tr>
+              </tbody>
+              </table>
+  
+  
    @param {Object} callbacks An object with callback methods defined
    @param {Method} callbacks.success The callback method to call on a successful log in request
    @param {Method} callbacks.failure The callback method to call on a failed log in request
-   @example 
-   
-   KiiSocialConnect.linkCurrentUserWithNetwork(KiiSocialNetworkName.FACEBOOK, {
+   @throws {InvalidArgumentException} If access token or access token secret does not exist or invalid(null or empty) in specified options.
+   @example
+   // Example of using no option
+   KiiSocialConnect.linkCurrentUserWithNetwork(KiiSocialNetworkName.FACEBOOK, null, {
    
        success: function(user, network) {
            // do something now that the user is linked
@@ -4653,31 +5174,24 @@ root.KiiSocialConnect = (function() {
 
 
   KiiSocialConnect.unLinkCurrentUserFromNetwork = function(networkName, callbacks) {
-    var called;
-
     root.Kii.logger("Trying with instance");
     root.Kii.logger(_instance);
-    called = false;
     if (_instance != null) {
       root.Kii.logger("And manager: ");
       root.Kii.logger(_instance._getManager(networkName));
       if (_instance._getManager(networkName)) {
-        _instance._getManager(networkName)._unlinkFromCurrentUser(callbacks);
-        called = true;
+        return _instance._getManager(networkName)._unlinkFromCurrentUser(callbacks);
       }
-    }
-    root.Kii.logger("Callbacks");
-    root.Kii.logger(callbacks);
-    if (!called && (callbacks != null)) {
+    } else if (callbacks != null) {
       return callbacks.failure(root.KiiUser.getCurrentUser(), networkName, "Unable to get network. Please ensure the network name is one of the supported KiiSocialNetworkName values");
     }
   };
 
   /** Retrieve the current user's access token from a social network
-  
   The network must be set up and linked to the current user. It is recommended you save this to preferences for multi-session use.
   @param networkName One of the supported KiiSocialNetworkName values
   @returns {String} The current access token, null if unavailable
+  @deprecated Use {@link KiiSocialConnect.getAccessTokenObjectForNetwork} instead.
   */
 
 
@@ -4690,6 +5204,7 @@ root.KiiSocialConnect = (function() {
   The network must be set up and linked to the current user. It is recommended you save this to preferences for multi-session use.
   @param networkName One of the supported KiiSocialNetworkName values
   @returns {String} The current access token expiration date, null if unavailable
+  @deprecated Use {@link KiiSocialConnect.getAccessTokenObjectForNetwork} instead.
   */
 
 
@@ -4697,12 +5212,49 @@ root.KiiSocialConnect = (function() {
     return _instance._getManager(networkName)._getTokenExpiration();
   };
 
+  /** Retrieve the current user's access token object from a social network
+  
+  The network must be set up and linked to the current user.
+  It is recommended you save this to preferences for multi-session use.<br><br>
+  Following parameters can be assigned to object.<br><br>
+  <b>Facebook</b>
+  <li>access_token</li>
+  <li>expires_in</li>
+  <br>
+  <b>Twitter</b>
+  <li>oauth_token</li>
+  <li>oauth_token_secret</li>
+  
+  @param networkName One of the supported KiiSocialNetworkName values
+  @returns {Object} tokenObject The current access token object, null if unavailable.
+  */
+
+
+  KiiSocialConnect.getAccessTokenObjectForNetwork = function(networkName) {
+    return _instance._getManager(networkName)._getTokenObject();
+  };
+
+  KiiSocialConnect.logOutAll = function() {
+    var fb, tw;
+
+    if (_instance != null) {
+      fb = _instance._getManager(root.KiiSocialNetworkName.FACEBOOK);
+      if (fb != null) {
+        fb._logOut();
+      }
+      tw = _instance._getManager(root.KiiSocialNetworkName.TWITTER);
+      if (tw != null) {
+        return tw._logOut();
+      }
+    }
+  };
+
   return KiiSocialConnect;
 
 }).call(this);
 
 _KiiSocialConnect = (function() {
-  var _facebookManager;
+  var _facebookManager, _twitterManager;
 
   function _KiiSocialConnect() {
     this._getManager = __bind(this._getManager, this);
@@ -4710,12 +5262,20 @@ _KiiSocialConnect = (function() {
 
   _facebookManager = null;
 
+  _twitterManager = null;
+
   _KiiSocialConnect.prototype._getManager = function(networkName) {
     if (networkName === root.KiiSocialNetworkName.FACEBOOK) {
       if (this._facebookManager != null) {
         return this._facebookManager;
       } else {
         return this._facebookManager = new root.KiiSCNFacebook();
+      }
+    } else if (networkName === root.KiiSocialNetworkName.TWITTER) {
+      if (this._twitterManager != null) {
+        return this._twitterManager;
+      } else {
+        return this._twitterManager = new root.KiiSCNTwitter();
       }
     }
   };
@@ -4725,7 +5285,7 @@ _KiiSocialConnect = (function() {
 })();
 
 root.KiiSocialConnectNetwork = (function() {
-  var _callbacks, _extras, _key, _network, _secret, _token, _tokenExpiration;
+  var _callbacks, _extras, _key, _network, _secret, _token, _tokenExpiration, _tokenObject;
 
   KiiSocialConnectNetwork.prototype._className = "KiiSocialConnectNetwork";
 
@@ -4740,6 +5300,8 @@ root.KiiSocialConnectNetwork = (function() {
   _token = null;
 
   _tokenExpiration = null;
+
+  _tokenObject = null;
 
   _callbacks = null;
 
@@ -4791,6 +5353,14 @@ root.KiiSocialConnectNetwork = (function() {
     return this._tokenExpiration;
   };
 
+  KiiSocialConnectNetwork.prototype._setTokenObject = function(_tokenObject) {
+    this._tokenObject = _tokenObject;
+  };
+
+  KiiSocialConnectNetwork.prototype._getTokenObject = function() {
+    return this._tokenObject;
+  };
+
   KiiSocialConnectNetwork.prototype._setCallbacks = function(_callbacks) {
     this._callbacks = _callbacks;
   };
@@ -4810,6 +5380,8 @@ root.KiiSocialConnectNetwork = (function() {
     this._isAuthenticated = __bind(this._isAuthenticated, this);
     this._getCallbacks = __bind(this._getCallbacks, this);
     this._setCallbacks = __bind(this._setCallbacks, this);
+    this._getTokenObject = __bind(this._getTokenObject, this);
+    this._setTokenObject = __bind(this._setTokenObject, this);
     this._getTokenExpiration = __bind(this._getTokenExpiration, this);
     this._setTokenExpiration = __bind(this._setTokenExpiration, this);
     this._getToken = __bind(this._getToken, this);
@@ -4825,12 +5397,13 @@ root.KiiSocialConnectNetwork = (function() {
   }
 
   KiiSocialConnectNetwork.prototype._isAuthenticated = function() {
-    return this._token != null;
+    return this._tokenObject != null;
   };
 
   KiiSocialConnectNetwork.prototype._reset = function() {
     this._token = null;
     this._tokenExpiration = null;
+    this._tokenObject = null;
     this._key = null;
     this._secret = null;
     return this._extras = null;
@@ -4840,7 +5413,11 @@ root.KiiSocialConnectNetwork = (function() {
     this._callbacks = _callbacks;
   };
 
-  KiiSocialConnectNetwork.prototype._logOut = function() {};
+  KiiSocialConnectNetwork.prototype._logOut = function() {
+    this._token = null;
+    this._tokenExpiration = null;
+    return this._tokenObject = null;
+  };
 
   KiiSocialConnectNetwork.prototype._linkWithCurrentUser = function(options, _callbacks) {
     this._callbacks = _callbacks;
@@ -4902,10 +5479,15 @@ root.KiiSCNFacebook = (function(_super) {
     request.setContentType("application/vnd.kii.AuthTokenFacebookRequest+json");
     registrationCallbacks = {
       success: function(data) {
-        var user;
+        var tokenObject, user;
 
         _this._setToken(token);
         _this._setTokenExpiration(expires);
+        tokenObject = {
+          "access_token": token,
+          "expires_in": expires
+        };
+        _this._setTokenObject(tokenObject);
         user = new root.KiiUser();
         user._updateWithJSON(data);
         user._setAccessToken(data['access_token']);
@@ -4935,8 +5517,15 @@ root.KiiSCNFacebook = (function(_super) {
     });
     linkCallbacks = {
       success: function(data) {
+        var tokenObject;
+
         _this._setToken(token);
         _this._setTokenExpiration(expires);
+        tokenObject = {
+          "access_token": token,
+          "expires_in": expires
+        };
+        _this._setTokenObject(tokenObject);
         if (_this._callbacks != null) {
           return _this._callbacks.success(root.KiiUser.getCurrentUser(), _this._network);
         }
@@ -4959,6 +5548,9 @@ root.KiiSCNFacebook = (function(_super) {
     request.setMethod("POST");
     unlinkCallbacks = {
       success: function(data) {
+        _this._setToken(null);
+        _this._setTokenExpiration(null);
+        _this._setTokenObject(null);
         if (_this._callbacks != null) {
           return _this._callbacks.success(root.KiiUser.getCurrentUser(), _this._network);
         }
@@ -4973,35 +5565,56 @@ root.KiiSCNFacebook = (function(_super) {
   };
 
   KiiSCNFacebook.prototype._logIn = function(options, callbacks) {
-    var _this = this;
+    var fbcallback, scope, statusCallback,
+      _this = this;
 
     KiiSCNFacebook.__super__._logIn.call(this, options, callbacks);
     root.Kii.logger("should auth fb");
     _this = this;
     root.Kii.logger("Checking options");
     root.Kii.logger(options);
-    if ((options != null) && (options.access_token != null) && (options.access_token_expires != null)) {
+    fbcallback = function(response) {
+      if (response.authResponse != null) {
+        if (root.KiiUser.getCurrentUser() != null) {
+          KiiUser.logOut();
+        }
+        return _this._register(response.authResponse.accessToken, response.authResponse.expiresIn);
+      } else {
+        if (_this._callbacks != null) {
+          return _this._callbacks.failure(null, _this._network, "User cancelled login or did not fully authorize");
+        }
+      }
+    };
+    if ((options != null) && (options.access_token != null)) {
       root.Kii.logger("Have options: ");
       root.Kii.logger(options);
       if (root.KiiUser.getCurrentUser() != null) {
-        return _this._link(options.access_token, options.access_token_expires);
-      } else {
-        return _this._register(options.access_token, options.access_token_expires);
+        KiiUser.logOut();
       }
+      return _this._register(options.access_token, null);
     } else {
-      return FB.login(function(response) {
-        if (response.authResponse != null) {
-          if (root.KiiUser.getCurrentUser() != null) {
-            return _this._link(response.authResponse.accessToken, response.authResponse.expiresIn);
-          } else {
-            return _this._register(response.authResponse.accessToken, response.authResponse.expiresIn);
-          }
+      scope = null;
+      if ((options != null) && (options.scope != null)) {
+        scope = {
+          "scope": options.scope
+        };
+      }
+      statusCallback = function(response) {
+        if (response.status === 'connected') {
+          return fbcallback(response);
         } else {
-          if (_this._callbacks != null) {
-            return _this._callbacks.failure(null, _this._network, "User cancelled login or did not fully authorize");
-          }
+          return FB.login(fbcallback, scope);
         }
-      });
+      };
+      FB.getLoginStatus(statusCallback);
+      statusCallback = function(response) {
+        if (response.status === 'connected') {
+          return fbcallback(response);
+        } else {
+          return FB.login(fbcallback);
+        }
+      };
+      return FB.getLoginStatus(statusCallback);
     }
   };
 
@@ -5011,21 +5624,35 @@ root.KiiSCNFacebook = (function(_super) {
   };
 
   KiiSCNFacebook.prototype._linkWithCurrentUser = function(options, callbacks) {
-    var _this = this;
+    var fbcallback, scope, statusCallback, _this;
 
     KiiSCNFacebook.__super__._linkWithCurrentUser.call(this, options, callbacks);
     _this = this;
+    fbcallback = function(response) {
+      if (response.authResponse) {
+        return _this._link(response.authResponse.accessToken, response.authResponse.expiresIn);
+      } else if (_this._callbacks != null) {
+        return _this._callbacks.failure(null, _this._network, "User cancelled Facebook login or did not fully authorize");
+      }
+    };
     if (root.KiiUser.getCurrentUser() != null) {
-      if ((options != null) && (options.access_token != null) && (options.access_token_expires != null)) {
-        return _this._link(options.access_token, options.access_token_expires);
+      if ((options != null) && (options.access_token != null)) {
+        return _this._link(options.access_token, null);
       } else {
-        return FB.login(function(response) {
-          if (response.authResponse) {
-            return _this._link(response.authResponse.accessToken, response.authResponse.expiresIn);
-          } else if (_this._callbacks != null) {
-            return _this._callbacks.failure(null, _this._network, "User cancelled Facebook login or did not fully authorize");
+        scope = null;
+        if ((options != null) && (options.scope != null)) {
+          scope = {
+            "scope": options.scope
+          };
+        }
+        statusCallback = function(response) {
+          if (response.status === 'connected') {
+            return fbcallback(response);
+          } else {
+            return FB.login(fbcallback, scope);
           }
-        });
+        };
+        return FB.getLoginStatus(statusCallback);
       }
     } else if (callbacks != null) {
       return callbacks.failure("A KiiUser must be logged in before linking to Facebook");
@@ -5097,6 +5724,10 @@ root.InvalidLimitException = function() {
   return _this.message = "Unable to set query limit. Must be an integer > 0";
 };
 
+root.InvalidArgumentException = function(message) {
+  return _this.message = 'InvalidArgument: ' + message;
+};
+
 /**
     @class represents the app admin context 
     <br><br>
@@ -5119,7 +5750,8 @@ root.KiiAppAdminContext = (function() {
 
   function KiiAppAdminContext(spec) {
     this._getToken = __bind(this._getToken, this);
-    this._getId = __bind(this._getId, this);    this._token = spec.token;
+    this._getId = __bind(this._getId, this);
+    this._objectWithURI = __bind(this._objectWithURI, this);    this._token = spec.token;
     this._id = spec.id;
   }
 
@@ -5195,6 +5827,65 @@ root.KiiAppAdminContext = (function() {
 
     user = root.KiiUserAdmin._userWithID(userid, this);
     return user;
+  };
+
+  KiiAppAdminContext.prototype._userWithLoginName = function(loginName, callbacks) {
+    var refreshCallbacks, request, user,
+      _this = this;
+
+    user = new root.KiiUserAdmin(this);
+    request = user._getRequest({
+      path: "/users/LOGIN_NAME:" + loginName,
+      withApp: true
+    });
+    request.setAdminToken(this._token);
+    refreshCallbacks = {
+      success: function(data, statusCode) {
+        if (statusCode < 300 && statusCode >= 200) {
+          user._updateWithJSON(data);
+          if (callbacks != null) {
+            return callbacks.success(user);
+          }
+        } else if (callbacks != null) {
+          return callbacks.failure("Unable to parse response");
+        }
+      },
+      failure: function(error, statusCode) {
+        if (callbacks != null) {
+          return callbacks.failure(error);
+        }
+      }
+    };
+    return request.execute(refreshCallbacks, false);
+  };
+
+  KiiAppAdminContext.prototype._objectWithURI = function(objectUri) {
+    var bucket, bucketIndex, bucketName, compLength, components, group, newURI, obj, subject, user;
+
+    newURI = objectUri.substr("kiicloud://".length);
+    components = newURI.split("/");
+    compLength = components.length;
+    if (compLength >= 4) {
+      bucketIndex = compLength === 4 ? 1 : 3;
+      bucketName = components[bucketIndex];
+      if (components[0] === "groups") {
+        group = new root.KiiGroupAdmin._groupWithID(components[1], this._token);
+      } else if (components[0] === "users") {
+        user = root.KiiUserAdmin._userWithID(components[1], this._token);
+      }
+      subject = null;
+      if (group != null) {
+        subject = group;
+      } else if (user != null) {
+        subject = user;
+      }
+      bucket = new root.KiiBucketAdmin(bucketName, subject, this._token);
+      obj = bucket.createObject();
+      obj._setUUID(components[compLength - 1]);
+    } else {
+      throw new root.InvalidURIException;
+    }
+    return obj;
   };
 
   KiiAppAdminContext.prototype._getId = function() {
@@ -5444,6 +6135,268 @@ root.KiiAnyAuthenticatedUser = (function() {
   return KiiAnyAuthenticatedUser;
 
 })();
+
+root.KiiSDKClientInfo = (function() {
+  var _clientInfo;
+
+  function KiiSDKClientInfo() {}
+
+  _clientInfo = null;
+
+  KiiSDKClientInfo.getSDKClientInfo = function() {
+    if (KiiSDKClientInfo._clientInfo == null) {
+      KiiSDKClientInfo._clientInfo = "sn=jss;sv=" + root.Kii.getSDKVersion();
+    }
+    return KiiSDKClientInfo._clientInfo;
+  };
+
+  return KiiSDKClientInfo;
+
+}).call(this);
+
+root.KiiSCNTwitter = (function(_super) {
+  __extends(KiiSCNTwitter, _super);
+
+  function KiiSCNTwitter() {
+    this._unlinkFromCurrentUser = __bind(this._unlinkFromCurrentUser, this);
+    this._linkWithCurrentUser = __bind(this._linkWithCurrentUser, this);
+    this._logOut = __bind(this._logOut, this);
+    this._logIn = __bind(this._logIn, this);
+    this._unlink = __bind(this._unlink, this);
+    this._link = __bind(this._link, this);
+    this._register = __bind(this._register, this);
+    this._setup = __bind(this._setup, this);    KiiSCNTwitter.__super__.constructor.call(this, KiiSocialNetworkName.TWITTER);
+  }
+
+  KiiSCNTwitter.prototype._setup = function(_key, _secret, _extras) {
+    this._key = _key;
+    this._secret = _secret;
+    this._extras = _extras;
+    return KiiSCNTwitter.__super__._setup.call(this, this._key, this._secret, this._extras);
+  };
+
+  KiiSCNTwitter.prototype._register = function(options, callbacks) {
+    var data, registrationCallbacks, request,
+      _this = this;
+
+    _this = this;
+    request = new KiiRequest("/integration/twitter", true);
+    request.setMethod("POST");
+    data = {
+      accessToken: options.oauth_token,
+      accessTokenSecret: options.oauth_token_secret
+    };
+    request.setData(data);
+    request.setAnonymous(true);
+    request.setContentType("application/vnd.kii.AuthTokenTwitterRequest+json");
+    registrationCallbacks = {
+      success: function(data) {
+        var tokenObject, user;
+
+        _this._setToken(options.oauth_token);
+        tokenObject = {
+          "oauth_token": options.oauth_token,
+          "oauth_token_secret": options.oauth_token_secret
+        };
+        _this._setTokenObject(tokenObject);
+        user = new root.KiiUser();
+        user._updateWithJSON(data);
+        user._setAccessToken(data['access_token']);
+        root.Kii.setCurrentUser(user);
+        if (callbacks != null) {
+          return callbacks.success(root.KiiUser.getCurrentUser(), _this._network);
+        }
+      },
+      failure: function(error, statusCode) {
+        if (callbacks != null) {
+          return callbacks.failure(null, _this._network, error);
+        }
+      }
+    };
+    return request.execute(registrationCallbacks, false);
+  };
+
+  KiiSCNTwitter.prototype._link = function(options, callbacks) {
+    var data, linkCallbacks, request,
+      _this = this;
+
+    _this = this;
+    request = new KiiRequest("/users/me/twitter/link", true);
+    request.setMethod("POST");
+    data = {
+      accessToken: options.oauth_token,
+      accessTokenSecret: options.oauth_token_secret
+    };
+    request.setData(data);
+    linkCallbacks = {
+      success: function(data) {
+        var tokenObject;
+
+        _this._setToken(options.oauth_token);
+        tokenObject = {
+          "oauth_token": options.oauth_token,
+          "oauth_token_secret": options.oauth_token_secret
+        };
+        _this._setTokenObject(tokenObject);
+        if (callbacks != null) {
+          return callbacks.success(root.KiiUser.getCurrentUser(), _this._network);
+        }
+      },
+      failure: function(error, statusCode) {
+        if (callbacks != null) {
+          return callbacks.failure(root.KiiUser.getCurrentUser(), _this._network, error);
+        }
+      }
+    };
+    return request.execute(linkCallbacks, true);
+  };
+
+  KiiSCNTwitter.prototype._unlink = function(callbacks) {
+    var request, unlinkCallbacks,
+      _this = this;
+
+    _this = this;
+    request = new KiiRequest("/users/me/twitter/unlink", true);
+    request.setMethod("POST");
+    unlinkCallbacks = {
+      success: function(data) {
+        _this._setToken(null);
+        _this._setTokenObject(null);
+        if (callbacks != null) {
+          return callbacks.success(root.KiiUser.getCurrentUser(), _this._network);
+        }
+      },
+      failure: function(error, statusCode) {
+        if (callbacks != null) {
+          return callbacks.failure(root.KiiUser.getCurrentUser(), _this._network, error);
+        }
+      }
+    };
+    return request.execute(unlinkCallbacks, true);
+  };
+
+  KiiSCNTwitter.prototype._logIn = function(options, callbacks) {
+    KiiSCNTwitter.__super__._logIn.call(this, options, callbacks);
+    _this = this;
+    root.Kii.logger("Checking options");
+    root.Kii.logger(options);
+    if ((options == null) || (!options.oauth_token && !options.oauth_token_secret)) {
+      throw root.InvalidArgumentException('Both options.oauth_token and options.oauth_token_secret are required');
+    } else if (!options.oauth_token) {
+      throw root.InvalidArgumentException('options.oauth_token is required');
+    } else if (!options.oauth_token_secret) {
+      throw root.InvalidArgumentException('options.oauth_token_secret is required');
+    }
+    if (root.KiiUser.getCurrentUser() != null) {
+      root.KiiUser.logOut();
+    }
+    return _this._register(options, callbacks);
+  };
+
+  KiiSCNTwitter.prototype._logOut = function() {
+    KiiSCNTwitter.__super__._logOut.apply(this, arguments);
+    return root.Kii.logger("Log out twitter");
+  };
+
+  KiiSCNTwitter.prototype._linkWithCurrentUser = function(options, callbacks) {
+    _this = this;
+    if (root.KiiUser.getCurrentUser() == null) {
+      callbacks.failure(null, _this._network, "No user logged in");
+      return;
+    }
+    if ((options == null) || (!options.oauth_token && !options.oauth_token_secret)) {
+      throw root.InvalidArgumentException('Both options.oauth_token and options.oauth_token_secret are required');
+    } else if (!options.oauth_token) {
+      throw root.InvalidArgumentException('options.oauth_token is required');
+    } else if (!options.oauth_token_secret) {
+      throw root.InvalidArgumentException('options.oauth_token_secret is required');
+    }
+    return _this._link(options, callbacks);
+  };
+
+  KiiSCNTwitter.prototype._unlinkFromCurrentUser = function(callbacks) {
+    _this = this;
+    if (root.KiiUser.getCurrentUser() == null) {
+      callbacks.failure(null, _this._network, "No user logged in");
+      return;
+    }
+    return this._unlink(callbacks);
+  };
+
+  return KiiSCNTwitter;
+
+})(root.KiiSocialConnectNetwork);
+
+/**
+    @class Represents Geo Point.
+    @exports root.KiiGeoPoint as KiiGeoPoint
+*/
+
+
+root.KiiGeoPoint = (function() {
+  function KiiGeoPoint(_latitude, _longitude) {
+    var inRange;
+
+    this._latitude = _latitude;
+    this._longitude = _longitude;
+    this._toDict = __bind(this._toDict, this);
+    this.getLongitude = __bind(this.getLongitude, this);
+    this.getLatitude = __bind(this.getLatitude, this);
+    inRange = function(min, max, num) {
+      return (num > min) && (num < max) && (!isNaN(num));
+    };
+    if (!inRange(-90, 90, _latitude) || !inRange(-180, 180, _longitude)) {
+      throw root.InvalidArgumentException("Specified latitide or longitude is invalid");
+    }
+  }
+
+  /**
+      Return the latitide of this point.
+  */
+
+
+  KiiGeoPoint.prototype.getLatitude = function() {
+    return this._latitude;
+  };
+
+  /**
+      Return the longitude of this point.
+  */
+
+
+  KiiGeoPoint.prototype.getLongitude = function() {
+    return this._longitude;
+  };
+
+  /**
+      Create a geo point with the given latitude and longitude.
+      @param {Number} latitude Latitude of the point in degrees. Valid if the value is greater than -90 degrees and less than +90 degrees.
+      @param {Number} longitude Longitude of the point in degrees. Valid if the value is greater than -180 degrees and less than +180 degrees.
+      @throws {String} Specified latitude or longitude is invalid.
+      @return {KiiGeoPoint} A new reference of KiiGeoPoint.
+      @example
+      var point = KiiGeoPoint.geoPoint(35.07, 139.02);
+  */
+
+
+  KiiGeoPoint.geoPoint = function(latitude, longitude) {
+    return new root.KiiGeoPoint(latitude, longitude);
+  };
+
+  KiiGeoPoint.prototype._toDict = function() {
+    var dict;
+
+    dict = {
+      _type: 'point',
+      lat: this._latitude,
+      lon: this._longitude
+    };
+    return dict;
+  };
+
+  return KiiGeoPoint;
+
+}).call(this);
 
 return root;
 });  // generated by build.sh for running on Node.js
