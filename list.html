@@ -26,13 +26,14 @@
         var BUCKET_NAME = "myObjects";
         var KEY_NAME = "myObjectValue";
         var objectCount = 0;
+        var results;
         
         // a UI method to create a list item based on a KiiObject
-        function createListItem(obj) {
+        function createListItem(obj, index) {
         
             // generate some DOM elements.
             // set the KiiObject URI to an attribute so it can be tracked
-            var row = $("<li></li>").attr("uri", obj.objectURI());
+            var row = $("<li></li>").attr("uri", index);
             var link = $("<a></a>").attr("href", "#");
             
             // add the title/subtitle text
@@ -41,9 +42,9 @@
             
             // build the element
             $(row).append(link);
+
+            var deleteLink = $("<a></a>").attr("href", "javascript:removeFromList('"+index+"')");
             
-            // add a delete button based on the URI (so we know which object to delete)
-            var deleteLink = $("<a></a>").attr("href", "javascript:removeFromList('"+obj.objectURI()+"')");
             
             // build the element
             $(deleteLink).append("<h3>"+obj.get(KEY_NAME)+"</h3>");
@@ -57,22 +58,21 @@
         }
 
         // called from the UI, this method removes an object from the server
-        function removeFromList(uri) {
+        function removeFromList(index) {
         
             // show a loading animation
             $.mobile.showPageLoadingMsg();	
 
             // get a reference to the selected object
-            var obj = KiiObject.objectWithURI(uri);
+            var obj = results[index];
             
             // perform an asynchronous deletion, with callbacks
             obj.delete({
 
                 // callback for a successful deletion
                 success: function(theDeletedObject) {
-                
                     // find the associated UI element and remove it from the list
-                    $("[uri='"+uri+"']").remove();
+                    $("[uri='"+index+"']").remove();
                     
                     // hide the loader
                     $.mobile.hidePageLoadingMsg();	
@@ -80,7 +80,6 @@
                 
                 // callback for a failed deletion
                 failure: function(theObject, anErrorString) {
-
                     // hide the loading animation
                     $.mobile.hidePageLoadingMsg();	
                     
@@ -116,11 +115,7 @@
                 success: function(theSavedObject) {
 
                     // create a DOM element for this object
-                    var row = createListItem(theSavedObject);
-                    
-                    // prepend it to the listview and refresh the list
-                    $("#listview").prepend(row);
-                    $("#listview").listview('refresh');
+                    loadList();
                     
                     // hide the loader
                     $.mobile.hidePageLoadingMsg();	
@@ -162,6 +157,7 @@
 
                 // callback for a successful query
                 success: function(queryPerformed, resultSet) {
+                    results = resultSet;
                 
                     // clear the existing objects from the list
                     $("#listview").empty();
@@ -171,7 +167,7 @@
                     
                         // create a row UI element based on the object
                         var obj = resultSet[i];
-                        var row = createListItem(obj);
+                        var row = createListItem(obj, i);
                         
                         // add the row to the list
                         $("#listview").append(row);
