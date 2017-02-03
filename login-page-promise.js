@@ -1,6 +1,6 @@
 /*
 
- Copyright 2016 Kii Corporation
+ Copyright 2017 Kii Corporation
  http://kii.com
 
  Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,23 +17,23 @@
 
 */
 
-// called by the 'Log In' button on the UI
+// Called by the "Log In" button.
 function performLogIn() {
-    // get the username/password combination from the UI
+    // Get the username and password from the UI.
     var username = document.getElementById("username-field").value;
     var password = document.getElementById("password-field").value;
 
-    // authenticate the user asynchronously
+    // Authenticate the user asynchronously.
     KiiUser.authenticate(username, password).then(
-        // authentication succeeded
+        // If the user was authenticated
         function(theUser) {
             console.log("User authenticated: " + JSON.stringify(theUser));
 
-            // go to the main screen
+            // Go to the main screen.
             openListPage();
         }
     ).catch(
-        // authentication failed
+        // If the user was not authenticated
         function(error) {
             var errorString = error.message;
             console.log("Unable to authenticate user: " + errorString);
@@ -42,24 +42,25 @@ function performLogIn() {
     );
 }
 
-// the user clicked the 'sign up' button
+// Called by the "Sign Up" button.
 function performSignUp() {
-    // get the username/password combination from the UI
+    // Get the username and password from the UI.
     var username = document.getElementById("username-field").value;
     var password = document.getElementById("password-field").value;
 
-    // create a KiiUser object
+    // Create a KiiUser object.
     var user = KiiUser.userWithUsername(username, password);
+    // Register the user asynchronously.
     user.register().then(
-        // registration suceeded
+        // If the user was registered
         function(theUser) {
             console.log("User registered: " + JSON.stringify(theUser));
 
-            // go to the main screen
+            // Go to the main screen.
             openListPage();
         }
     ).catch(
-        // registration failed
+        // If the user was not registered
         function(error) {
             var errorString = error.message;
             alert("Unable to register user: " + errorString);

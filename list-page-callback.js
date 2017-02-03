@@ -1,6 +1,6 @@
 /*
 
- Copyright 2016 Kii Corporation
+ Copyright 2017 Kii Corporation
  http://kii.com
 
  Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,41 +17,41 @@
 
 */
 
-// define some global variables for list page
+// Define global variables used for creating objects.
 var objectCount = 0;
 var BUCKET_NAME = "myBucket";
 var OBJECT_KEY = "myObjectValue";
 
-// called when login or registration finished
+// Called when the user is logged in or registered.
 function openListPage() {
     document.getElementById("login-page").style.display = "none";
     document.getElementById("list-page").style.display = "block";
 
-    // clear the existing objects from the list
+    // Clear the existing objects from the list.
     var listView = document.getElementById("list-view");
     listView.innerHtml = "";
 
-    // create an empty KiiQuery (will return all objects in the bucket)
+    // Create an empty KiiQuery. This query will retrieve all results sorted by the creation date.
     var queryObject = KiiQuery.queryWithClause(null);
     queryObject.sortByDesc("_created");
 
-    // get the defined bucket belonging to this user
+    // Get the defined bucket belonging to the user.
     var bucket = KiiUser.getCurrentUser().bucketWithName(BUCKET_NAME);
 
-    // perform the asynchronous query, with callbacks defined
+    // Perform the query asynchronously.
     bucket.executeQuery(queryObject, {
-        // query succeeded
+        // If the query succeeded
         success: function(queryPerformed, result, nextQuery) {
             console.log("Execute query: got " + result.length + " objects");
 
-            // iterate through the result set
+            // Iterate through the result set.
             for(var i = 0; i < result.length; i++) {
-                // create a row UI element based on the object
+                // Create a row element with the object.
                 var row = createListItem(result[i]);
                 listView.appendChild(row);
             }
         },
-        // query failed
+        // If the query failed
         failure: function(queryPerformed, errorString) {
             alert("Unable to execute query: " + errorString);
             console.log("Unable to execute query: " + errorString);
@@ -59,15 +59,15 @@ function openListPage() {
     });
 }
 
-// create a <li> element as an item in the list box
+// Create a <li> element as an item in the list box.
 function createListItem(object) {
-    // create elements in the list item
+    // Create elements of the list item.
     var elementItem = document.createElement('li');
     var elementTitle = document.createElement('div');
     var elementSubtitle = document.createElement('div');
     var elementDelete = document.createElement('div');
 
-    // set the field value for each element
+    // Set the value of each element.
     elementTitle.innerText = object.get(OBJECT_KEY);
     elementTitle.className = "item-title";
 
@@ -78,7 +78,7 @@ function createListItem(object) {
     elementDelete.className = "item-button";
     elementDelete.onclick = function (e) { deleteItem(this.parentNode, object); };
 
-    // set elements as children of the list item
+    // Set the elements as children of the list item.
     elementItem.appendChild(elementTitle);
     elementItem.appendChild(elementDelete);
     elementItem.appendChild(elementSubtitle);
@@ -86,28 +86,28 @@ function createListItem(object) {
     return elementItem;
 }
 
-// called by the 'Add Item' button on the UI
+// Called by the "Add Item" button.
 function addItem() {
     var value = "MyObject " + (++objectCount);
 
     var bucket = KiiUser.getCurrentUser().bucketWithName(BUCKET_NAME);
 
-    // create a new KiiObject and set a key/value
+    // Create a new KiiObject instance and set the key-value pair.
     var obj = bucket.createObject();
     obj.set(OBJECT_KEY, value);
 
-    // perform an asynchronous creation, with callbacks
+    // Save the object asynchronously.
     obj.save({
-        // save suceeded
+        // If the object was saved
         success: function(theSavedObject) {
             console.log("Save succeeded: " + JSON.stringify(theSavedObject));
 
-            // add new item at the top of the list
+            // Insert the object at the top of the list.
             var row = createListItem(theSavedObject);
             var listView = document.getElementById("list-view");
             listView.insertBefore(row, listView.firstChild);
         },
-        // save failed
+        // If the object was not saved
         failure: function(theObject, errorString) {
             alert("Unable to create object: " + errorString);
             console.log("Unable to create object: " + errorString);
@@ -115,18 +115,18 @@ function addItem() {
     });
 }
 
-// called by the 'Delete' button on the UI
+// Called by the "Delete" button.
 function deleteItem(elementItem, object) {
-    // perform an asynchronous deletion, with callbacks
+    // Delete the object asynchronously.
     object.delete({
-        // delete suceeded
+        // If the object was deleted
         success: function(theDeletedObject) {
             console.log("Delete succeeded: " + JSON.stringify(theDeletedObject));
 
             var listView = document.getElementById("list-view");
             listView.removeChild(elementItem);
         },
-        // delete failed
+        // If the object was not deleted
         failure: function(theObject, errorString) {
             alert("Unable to delete object: " + errorString);
             console.log("Unable to delete object: " + errorString);
